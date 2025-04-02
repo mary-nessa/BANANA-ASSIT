@@ -24,3 +24,8 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Smooth progress bar animation */
+.progress-bar {
+  transition: width 0.3s ease-out;
+}
