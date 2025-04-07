@@ -60,7 +60,7 @@ export default function VarietyIdentification() {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            deviceId: "device-127-abc",
+            deviceId: "device-140-abc",
             imageUrl: "https://storage.example.com/images/banana-leaf-1.jpg", // Placeholder
           }),
         }

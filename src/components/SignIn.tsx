@@ -3,10 +3,13 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { signIn } from 'next-auth/react';
 import { FcGoogle } from 'react-icons/fc';
 import { FaTwitter, FaFacebook } from 'react-icons/fa';
 import Link from 'next/link';
+
+// Fixed admin credentials
+const ADMIN_EMAIL = "admin@bananaassist.com";
+const ADMIN_PASSWORD = "admin123"; // In production, use environment variables
 
 export default function SignIn() {
   const [email, setEmail] = useState('');
@@ -18,52 +21,39 @@ export default function SignIn() {
     e.preventDefault();
     setError('');
     
-    const result = await signIn('credentials', {
-      redirect: false,
-      email,
-      password,
-      callbackUrl: '/home'
-    });
-    
-    if (result?.error) {
-      setError(result.error);
-      console.error(result.error);
-    } else {
-      router.push('/home');
-    }
-  };
-
-  const handleGoogleSignIn = async () => {
     try {
-      await signIn('google', { callbackUrl: '/home' });
+      // Check for admin credentials
+      if (email === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
+        // Redirect to admin dashboard
+        router.push('/admin/dashboard');
+        return;
+      }
+      
+      // Regular user authentication (mock implementation)
+      // In a real app, you would verify against your user database
+      if (email && password) {
+        router.push('/home');
+      } else {
+        setError('Please enter both email and password');
+      }
+      
     } catch (err) {
-      setError('Failed to sign in with Google');
+      setError('Authentication failed');
       console.error(err);
     }
   };
 
-  const handleTwitterSignIn = async () => {
-    try {
-      await signIn('twitter', { callbackUrl: '/home' });
-    } catch (err) {
-      setError('Failed to sign in with Twitter');
-      console.error(err);
-    }
-  };
-
-  const handleFacebookSignIn = async () => {
-    try {
-      await signIn('facebook', { callbackUrl: '/home' });
-    } catch (err) {
-      setError('Failed to sign in with Facebook');
-      console.error(err);
-    }
+  const handleSocialSignIn = (provider: string) => {
+    // Social sign-in always goes to user home
+    router.push('/home');
   };
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-green-50 p-4">
       <div className="w-full max-w-md bg-white rounded-lg shadow-md p-8">
-        <h1 className="text-3xl font-bold text-center mb-8 text-green-600">SIGN IN</h1>
+        <h1 className="text-3xl font-bold text-center mb-8 text-green-600">
+          SIGN IN
+        </h1>
         
         {error && (
           <div className="mb-4 p-2 bg-red-100 text-red-700 text-sm rounded">
@@ -115,21 +105,21 @@ export default function SignIn() {
           <p className="text-center text-gray-600 mb-4">Or continue with</p>
           <div className="flex justify-center space-x-6">
             <button
-              onClick={handleGoogleSignIn}
+              onClick={() => handleSocialSignIn('google')}
               className="cursor-pointer text-3xl hover:opacity-80 transition-opacity"
               aria-label="Sign in with Google"
             >
               <FcGoogle />
             </button>
             <button
-              onClick={handleTwitterSignIn}
+              onClick={() => handleSocialSignIn('twitter')}
               className="cursor-pointer text-3xl text-blue-500 hover:opacity-80 transition-opacity"
               aria-label="Sign in with Twitter"
             >
               <FaTwitter />
             </button>
             <button
-              onClick={handleFacebookSignIn}
+              onClick={() => handleSocialSignIn('facebook')}
               className="cursor-pointer text-3xl text-blue-600 hover:opacity-80 transition-opacity"
               aria-label="Sign in with Facebook"
             >

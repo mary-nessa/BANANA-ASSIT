@@ -59,7 +59,7 @@ export default function DiseaseDetection() {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            deviceId: "device-129-abc",
+            deviceId: "device-130-abc",
             imageUrl: "https://storage.example.com/images/banana-leaf-1.jpg", // Placeholder
           }),
         }
