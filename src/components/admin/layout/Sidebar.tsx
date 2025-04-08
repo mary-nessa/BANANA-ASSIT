@@ -1,28 +1,14 @@
 'use client';
-
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import {
-  LayoutDashboard,
-  Users,
-  Image,
-  ClipboardList,
-  Trees,
-  MessageSquare,
-  LineChart,
-  Settings
-} from 'lucide-react';
+import { Users, Settings } from 'lucide-react';
 
+// Simplified navigation items with only Users
 const navItems = [
-  { name: 'Overview', path: '/admin/dashboard', icon: <LayoutDashboard className="h-5 w-5" /> },
   { name: 'User Management', path: '/admin/users', icon: <Users className="h-5 w-5" /> },
-  { name: 'Image Analysis', path: '/admin/images', icon: <Image className="h-5 w-5" /> },
-  { name: 'Diagnosis Reports', path: '/admin/diagnostics', icon: <ClipboardList className="h-5 w-5" /> },
-  { name: 'Banana Varieties', path: '/admin/varieties', icon: <Trees className="h-5 w-5" /> },
-  { name: 'Chatbot', path: '/admin/chatbot', icon: <MessageSquare className="h-5 w-5" /> },
-  { name: 'Analytics', path: '/admin/analytics', icon: <LineChart className="h-5 w-5" /> },
 ];
 
+// Settings item remains the same
 const settingsItem = { 
   name: 'Settings', 
   path: '/admin/settings', 
@@ -31,7 +17,7 @@ const settingsItem = {
 
 export default function Sidebar() {
   const pathname = usePathname();
-
+  
   return (
     <nav className="admin-sidebar bg-green-600 text-white p-4 flex flex-col h-full">
       <div className="sidebar-header mb-6 px-2">
@@ -55,7 +41,7 @@ export default function Sidebar() {
           </li>
         ))}
       </ul>
-
+      
       <div className="mt-auto pt-4 border-t border-green-500">
         <ul className="sidebar-menu">
           <li>
