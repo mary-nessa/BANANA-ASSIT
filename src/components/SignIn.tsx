@@ -1,4 +1,3 @@
-// components/SignIn.tsx
 "use client";
 
 import { useState } from 'react';
@@ -6,10 +5,6 @@ import { useRouter } from 'next/navigation';
 import { FcGoogle } from 'react-icons/fc';
 import { FaTwitter, FaFacebook } from 'react-icons/fa';
 import Link from 'next/link';
-
-// Fixed admin credentials
-const ADMIN_EMAIL = "admin@bananaassist.com";
-const ADMIN_PASSWORD = "admin123"; // In production, use environment variables
 
 export default function SignIn() {
   const [email, setEmail] = useState('');
@@ -20,31 +15,49 @@ export default function SignIn() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    
+
     try {
-      // Check for admin credentials
-      if (email === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
-        // Redirect to admin dashboard
+      // Call the /api/users/login endpoint
+      const response = await fetch('http://20.62.15.198:8080/api/users/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          username: email, // Using email as username per API
+          password,
+        }),
+      });
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error('Invalid credentials');
+        }
+        throw new Error('Authentication failed');
+      }
+
+      const data = await response.json();
+      const { token, userId, username, role } = data;
+
+      // Store the token for future authenticated requests
+      localStorage.setItem('authToken', token);
+      localStorage.setItem('userId', userId); // Store userId for API calls like /api/diagnoses/create
+
+      // Redirect based on role
+      if (role === 'ADMIN') {
         router.push('/admin/dashboard');
-        return;
-      }
-      
-      // Regular user authentication (mock implementation)
-      // In a real app, you would verify against your user database
-      if (email && password) {
-        router.push('/home');
       } else {
-        setError('Please enter both email and password');
+        router.push('/home');
       }
-      
-    } catch (err) {
-      setError('Authentication failed');
+    } catch (err: any) {
+      setError(err.message || 'An error occurred during sign-in');
       console.error(err);
     }
   };
 
   const handleSocialSignIn = (provider: string) => {
-    // Social sign-in always goes to user home
+    // Social sign-in always goes to user home (mock implementation)
+    // In a real app, integrate with your social auth provider
     router.push('/home');
   };
 

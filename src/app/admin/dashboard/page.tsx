@@ -1,31 +1,31 @@
 // src/app/admin/dashboard/page.tsx
-import StatsCard from '@/components/admin/dashboard/StatsCard';
+'use client';
 
-export default function DashboardPage() {
+import { useRouter } from 'next/navigation';
+
+export default function AdminDashboard() {
+  const router = useRouter();
+
+  const handleLogout = () => {
+    document.cookie = 'token=; path=/; max-age=0';
+    document.cookie = 'role=; path=/; max-age=0';
+    document.cookie = 'userId=; path=/; max-age=0';
+    router.push('/signin');
+  };
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-gray-800">User Management</h1>
-        <div className="text-sm text-gray-500">Last updated: {new Date().toLocaleDateString()}</div>
+    <div className="p-6 bg-gray-50 min-h-screen">
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-bold text-gray-800">Admin Dashboard</h1>
+        <button
+          onClick={handleLogout}
+          className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700"
+        >
+          Logout
+        </button>
       </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <StatsCard 
-          title="Total Users" 
-          value="1,234" 
-          trend="up" 
-          icon="👥"
-          description="All registered accounts"
-          className="hover:shadow-lg transition-shadow"
-        />
-        <StatsCard 
-          title="New Users" 
-          value="56" 
-          trend="up" 
-          icon="🆕"
-          description="This week"
-          className="hover:shadow-lg transition-shadow"
-        />
+      <div className="bg-white p-6 rounded-lg shadow-md">
+        <p className="text-gray-700">Welcome to the Admin Dashboard!</p>
       </div>
     </div>
   );
