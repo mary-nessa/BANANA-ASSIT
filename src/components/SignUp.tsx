@@ -1,10 +1,9 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { signIn } from 'next-auth/react';
 import { FcGoogle } from 'react-icons/fc';
-import { FaTwitter, FaFacebook } from 'react-icons/fa';
+import { FaTwitter, FaFacebook, FaEye, FaEyeSlash } from 'react-icons/fa';
 import Link from 'next/link';
 
 export default function SignUp() {
@@ -15,14 +14,24 @@ export default function SignUp() {
   const [contact, setContact] = useState('');
   const [location, setLocation] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [usernameNotification, setUsernameNotification] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false); // Loading state
   const router = useRouter();
+
+  // Scroll to top when usernameNotification changes
+  useEffect(() => {
+    if (usernameNotification) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [usernameNotification]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setUsernameNotification(null);
+    setIsLoading(true); // Start loading
 
-    // Step 1: Split full name into firstName and lastName (already handled by separate fields)
-    // Step 2: Call the /api/users/create endpoint
     try {
       const createResponse = await fetch('http://20.62.15.198:8080/api/users/create', {
         method: 'POST',
@@ -45,48 +54,42 @@ export default function SignUp() {
       }
 
       const userData = await createResponse.json();
-      const userId = userData.userID;
-      const username = userData.username; // API generates username
+      const generatedUsername = userData.username;
 
-      // Step 3: Automatically log in the user after signup using /api/users/login
-      const loginResponse = await fetch('http://20.62.15.198:8080/api/users/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          username,
-          password,
-        }),
-      });
+      // Show notification with the generated username
+      setUsernameNotification(
+        `Account created successfully, view username: "${generatedUsername}". Please use this username to sign in.`
+      );
 
-      if (!loginResponse.ok) {
-        throw new Error('Failed to log in after signup');
-      }
+      // Clear form fields
+      setFirstName('');
+      setLastName('');
+      setEmail('');
+      setPassword('');
+      setContact('');
+      setLocation('');
 
-      const loginData = await loginResponse.json();
-      const token = loginData.token;
-
-      // Step 4: Store the token (e.g., in localStorage or a state management solution)
-      localStorage.setItem('authToken', token);
-
-      // Step 5: Redirect to home page after successful signup and login
-      router.push('/home');
     } catch (err: any) {
       setError(err.message || 'An error occurred during signup');
+    } finally {
+      setIsLoading(false); // Stop loading
     }
   };
 
   const handleGoogleSignUp = async () => {
-    await signIn('google', { callbackUrl: '/home' });
+    setError('Social sign-up is not supported at this time. Please use the form to sign up.');
   };
 
   const handleTwitterSignUp = async () => {
-    await signIn('twitter', { callbackUrl: '/home' });
+    setError('Social sign-up is not supported at this time. Please use the form to sign up.');
   };
 
   const handleFacebookSignUp = async () => {
-    await signIn('facebook', { callbackUrl: '/home' });
+    setError('Social sign-up is not supported at this time. Please use the form to sign up.');
+  };
+
+  const togglePasswordVisibility = () => {
+    setShowPassword(!showPassword);
   };
 
   return (
@@ -97,6 +100,15 @@ export default function SignUp() {
         {error && (
           <div className="mb-4 text-red-600 text-center">
             {error}
+          </div>
+        )}
+
+        {usernameNotification && (
+          <div className="mb-4 p-2 bg-green-100 text-green-700 text-sm rounded text-center">
+            {usernameNotification}{' '}
+            <Link href="/signin" className="text-green-600 hover:underline font-medium">
+              Sign in now
+            </Link>
           </div>
         )}
 
@@ -143,19 +155,27 @@ export default function SignUp() {
               required
             />
           </div>
-          <div className="mb-4">
+          <div className="mb-4 relative">
             <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="password">
               Password
             </label>
             <input
-              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline pr-10"
               id="password"
-              type="password"
+              type={showPassword ? "text" : "password"}
               placeholder="Password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
             />
+            <button
+              type="button"
+              onClick={togglePasswordVisibility}
+              className="absolute right-3 top-10 text-gray-600 hover:text-gray-800"
+              aria-label={showPassword ? "Hide password" : "Show password"}
+            >
+              {showPassword ? <FaEyeSlash /> : <FaEye />}
+            </button>
           </div>
           <div className="mb-4">
             <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="contact">
@@ -188,10 +208,21 @@ export default function SignUp() {
 
           <div className="flex justify-center mb-4">
             <button
-              className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg focus:outline-none focus:shadow-outline w-full text-lg"
+              className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg focus:outline-none focus:shadow-outline w-full text-lg flex items-center justify-center"
               type="submit"
+              disabled={isLoading}
             >
-              Create Account
+              {isLoading ? (
+                <>
+                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Creating Account...
+                </>
+              ) : (
+                'Create Account'
+              )}
             </button>
           </div>
         </form>

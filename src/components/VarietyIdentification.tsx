@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { FaCamera, FaUpload, FaCheck, FaHome, FaInfoCircle, FaSeedling } from 'react-icons/fa';
+import { FaCamera, FaUpload, FaCheck, FaHome } from 'react-icons/fa';
 
 export default function VarietyIdentification() {
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
@@ -11,6 +11,7 @@ export default function VarietyIdentification() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
 
   // Device tracking state for guest users
   const [deviceID, setDeviceID] = useState<string>("");
@@ -23,12 +24,16 @@ export default function VarietyIdentification() {
   const [userId, setUserId] = useState<string | null>(null);
   const [authToken, setAuthToken] = useState<string | null>(null);
 
-  // API Base URL (updated to match the documentation)
+  // Camera refs
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  // API Base URL
   const API_BASE_URL = "http://20.62.15.198:8080";
 
   // Check authentication and device ID on component mount
   useEffect(() => {
-    // Check if user is authenticated
     const token = localStorage.getItem('authToken');
     const storedUserId = localStorage.getItem('userId');
 
@@ -37,7 +42,6 @@ export default function VarietyIdentification() {
       setAuthToken(token);
       setUserId(storedUserId);
     } else {
-      // Generate or retrieve device ID for guest users
       const generateDeviceId = () => {
         return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
           const r = Math.random() * 16 | 0;
@@ -56,6 +60,10 @@ export default function VarietyIdentification() {
       checkDeviceUsage(storedDeviceID);
       checkVarietyLimit(storedDeviceID);
     }
+
+    return () => {
+      stopCamera();
+    };
   }, []);
 
   // Function to check device usage from API (for guest users)
@@ -68,18 +76,29 @@ export default function VarietyIdentification() {
         },
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        setVarietyAttempts(data.varietyAttempts || 0);
-      } else if (response.status === 404) {
-        setVarietyAttempts(0);
+      if (!response.ok) {
+        if (response.status === 403) {
+          setError("Access denied. Please sign in to continue.");
+          setLimitReached(true);
+          setRequiresSignup(true);
+          setShowModal(true);
+        } else if (response.status === 404) {
+          setVarietyAttempts(0);
+        } else {
+          setError(`Failed to check device usage: ${response.status}`);
+        }
+        return;
       }
+
+      const data = await response.json();
+      setVarietyAttempts(data.varietyAttempts || 0);
     } catch (error) {
       console.error("Error checking device usage:", error);
+      setError("Network error. Please check your connection and try again.");
     }
   };
 
-  // Function to check if device has reached variety identification limit (for guest users)
+  // Function to check if device has reached variety identification limit
   const checkVarietyLimit = async (id: string) => {
     try {
       const response = await fetch(`${API_BASE_URL}/api/guest/variety/limit/${id}`, {
@@ -89,21 +108,105 @@ export default function VarietyIdentification() {
         },
       });
 
-      if (response.ok) {
-        const limitStatus = await response.json();
-        setLimitReached(limitStatus === true);
-        if (limitStatus) {
+      if (!response.ok) {
+        if (response.status === 403) {
+          setError("Access denied. Please sign in to continue.");
+          setLimitReached(true);
           setRequiresSignup(true);
           setShowModal(true);
+        } else {
+          setError(`Failed to check variety limit: ${response.status}`);
         }
+        return;
+      }
+
+      const limitStatus = await response.json();
+      setLimitReached(limitStatus.limitReached === true);
+      if (limitStatus.limitReached) {
+        setRequiresSignup(true);
+        setShowModal(true);
+        setError("You have reached the maximum number of variety identification attempts (3/3). Please sign in or sign up to continue.");
       }
     } catch (error) {
       console.error("Error checking variety limit:", error);
+      setError("Network error. Please check your connection and try again.");
+    }
+  };
+
+  // Camera functions
+  const startCamera = async () => {
+    if (!isAuthenticated && limitReached) {
+      setError("Guest limit reached. Please sign in to use the camera.");
+      setShowModal(true);
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+      });
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.onloadedmetadata = () => videoRef.current?.play();
+        streamRef.current = stream;
+        setIsCameraOpen(true);
+        setError(null);
+      }
+    } catch (err: any) {
+      console.error("Error accessing camera:", err);
+      let errorMessage = "Failed to access camera. Please ensure camera permissions are granted.";
+      if (err.name === 'NotAllowedError') {
+        errorMessage = "Camera access denied. Please allow camera permissions in your browser settings.";
+      } else if (err.name === 'NotFoundError') {
+        errorMessage = "No camera found. Please upload an image instead.";
+      }
+      setError(errorMessage);
+      setIsCameraOpen(false);
+    }
+  };
+
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    setIsCameraOpen(false);
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+  };
+
+  const capturePhoto = () => {
+    if (videoRef.current && canvasRef.current && !videoRef.current.paused && !videoRef.current.ended) {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      const context = canvas.getContext('2d');
+
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+
+      context?.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      canvas.toBlob((blob) => {
+        if (blob) {
+          const file = new File([blob], `photo-${Date.now()}.jpg`, { type: 'image/jpeg' });
+          setSelectedImage(file);
+          setVariety(null);
+          setError(null);
+          stopCamera();
+        } else {
+          setError("Failed to capture photo. Please try again.");
+        }
+      }, 'image/jpeg', 0.9);
+    } else {
+      setError("Camera is not ready. Please try again or upload an image.");
     }
   };
 
   const handleTakePhoto = () => {
-    alert("Camera functionality will open your device camera when implemented.");
+    if (!isCameraOpen) {
+      startCamera();
+    }
   };
 
   const handleFileChange = (file: File) => {
@@ -141,7 +244,6 @@ export default function VarietyIdentification() {
       return;
     }
 
-    // For guest users, check attempt limit
     if (!isAuthenticated && limitReached) {
       setError("You have reached the maximum number of variety identification attempts. Please sign in to continue.");
       setRequiresSignup(true);
@@ -159,7 +261,6 @@ export default function VarietyIdentification() {
       let response;
 
       if (isAuthenticated) {
-        // Authenticated user: Use /api/varieties/create
         if (!userId || !authToken) {
           throw new Error("User authentication data missing.");
         }
@@ -175,15 +276,19 @@ export default function VarietyIdentification() {
 
         if (!response.ok) {
           if (response.status === 401) {
-            throw new Error("Authentication failed. Please sign in again.");
+            setError("Authentication failed. Please sign in again.");
+            localStorage.removeItem('authToken');
+            localStorage.removeItem('userId');
+            setIsAuthenticated(false);
+            setShowModal(true);
+          } else if (response.status === 403) {
+            setError("You do not have permission to perform this action.");
           } else if (response.status === 404) {
-            throw new Error("User not found.");
+            setError("User not found.");
           }
           throw new Error(`Failed to create variety identification: ${response.status}`);
         }
 
-        // /api/varieties/create likely returns an empty response (similar to /api/diagnoses/create)
-        // Fetch the variety result using a hypothetical /api/varieties/user/{userId} endpoint
         const varietyResponse = await fetch(`${API_BASE_URL}/api/varieties/user/${userId}`, {
           method: "GET",
           headers: {
@@ -197,20 +302,13 @@ export default function VarietyIdentification() {
         }
 
         const varietyData = await varietyResponse.json();
-        const latestVariety = varietyData[varietyData.length - 1]; // Get the most recent variety identification
+        const latestVariety = varietyData[varietyData.length - 1];
         setVariety({
           result: latestVariety.varietyName,
           confidenceLevel: latestVariety.confidenceLevel,
           processingTime: latestVariety.processingTime,
         });
       } else {
-        // Guest user: Use /api/varieties/analyze
-        const registered = await registerVarietyAttempt();
-        if (!registered) {
-          setIsLoading(false);
-          return;
-        }
-
         formData.append('deviceId', deviceID);
         response = await fetch(`${API_BASE_URL}/api/varieties/analyze`, {
           method: "POST",
@@ -218,24 +316,29 @@ export default function VarietyIdentification() {
         });
 
         if (!response.ok) {
-          if (response.status === 400) {
+          if (response.status === 403 || response.status === 400) {
             setLimitReached(true);
             setRequiresSignup(true);
             setShowModal(true);
-            setError("You have reached the maximum number of variety identification attempts. Please sign in to continue.");
+            setError("You have reached the maximum number of variety identification attempts (3/3). Please sign in or sign up to continue.");
             return;
           }
           throw new Error(`Failed to analyze image: ${response.status}`);
         }
 
         const data = await response.json();
-        setVariety(data);
+        setVariety({
+          result: data.varietyName,
+          confidenceLevel: data.confidenceLevel,
+          processingTime: data.processingTime,
+        });
         setVarietyAttempts(3 - (data.remainingAttempts || 0));
 
-        if (data.requiresSignup) {
+        if (data.limitReached || data.requiresSignup) {
           setRequiresSignup(true);
           setLimitReached(true);
           setShowModal(true);
+          setError("You have reached the maximum number of variety identification attempts (3/3). Please sign in or sign up to continue.");
         }
       }
     } catch (error) {
@@ -243,43 +346,6 @@ export default function VarietyIdentification() {
       setError(error instanceof Error ? error.message : 'Failed to analyze image. Please try again.');
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  // Function to register a variety attempt with the API (for guest users)
-  const registerVarietyAttempt = async () => {
-    if (limitReached) {
-      setError("You have reached the maximum number of variety identification attempts. Please sign in to continue.");
-      setRequiresSignup(true);
-      setShowModal(true);
-      return false;
-    }
-
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/guest/variety/${deviceID}`, {
-        method: "POST",
-        headers: {
-          'Accept': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        if (response.status === 400) {
-          setLimitReached(true);
-          setRequiresSignup(true);
-          setShowModal(true);
-          setError("You have reached the maximum number of variety identification attempts. Please sign in to continue.");
-          return false;
-        }
-        throw new Error(`Failed to register attempt: ${response.status}`);
-      }
-
-      const newVarietyAttempts = varietyAttempts + 1;
-      setVarietyAttempts(newVarietyAttempts);
-      return true;
-    } catch (error) {
-      console.error("Error registering attempt:", error);
-      return false;
     }
   };
 
@@ -315,69 +381,99 @@ export default function VarietyIdentification() {
               </div>
             )}
 
-            {/* Drag & Drop Area */}
-            <div
-              className={`w-full h-64 border-2 ${
-                isDragging ? 'border-green-500 bg-green-50' : 'border-dashed border-gray-300'
-              } rounded-lg p-4 mb-4 text-center cursor-pointer transition-all flex flex-col items-center justify-center ${
-                !isAuthenticated && limitReached ? 'opacity-50 pointer-events-none' : ''
-              }`}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-              onClick={() => document.getElementById('fileInput')?.click()}
-            >
-              {selectedImage ? (
-                <>
-                  <img
-                    src={URL.createObjectURL(selectedImage)}
-                    alt="Selected"
-                    className="max-h-48 max-w-full object-contain rounded-lg mb-2"
-                  />
-                  <p className="text-sm text-gray-500 mt-2">Click or drag to change image</p>
-                </>
-              ) : (
-                <>
-                  <FaUpload className="text-4xl text-green-500 mb-3" />
-                  <p className="text-gray-600 mb-1">
-                    {isDragging ? 'Drop your image here' : 'Drag & drop an image'}
-                  </p>
-                  <p className="text-sm text-gray-500">or click to browse files</p>
-                </>
-              )}
-              <input
-                id="fileInput"
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={handleUploadImage}
-                disabled={!isAuthenticated && limitReached}
-              />
-            </div>
+            {isCameraOpen ? (
+              <div className="w-full h-64 bg-black rounded-lg overflow-hidden mb-4 relative">
+                <video ref={videoRef} autoPlay className="w-full h-full object-cover" />
+                {error && (
+                  <div className="absolute bottom-0 left-0 right-0 bg-red-600 text-white text-center p-2">
+                    {error}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div
+                className={`w-full h-64 border-2 ${
+                  isDragging ? 'border-green-500 bg-green-50' : 'border-dashed border-gray-300'
+                } rounded-lg p-4 mb-4 text-center cursor-pointer transition-all flex flex-col items-center justify-center ${
+                  !isAuthenticated && limitReached ? 'opacity-50 pointer-events-none' : ''
+                }`}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                onClick={() => !(!isAuthenticated && limitReached) && document.getElementById('fileInput')?.click()}
+              >
+                {selectedImage ? (
+                  <>
+                    <img
+                      src={URL.createObjectURL(selectedImage)}
+                      alt="Selected"
+                      className="max-h-48 max-w-full object-contain rounded-lg mb-2"
+                    />
+                    <p className="text-sm text-gray-500 mt-2">Click or drag to change image</p>
+                  </>
+                ) : (
+                  <>
+                    <FaUpload className="text-4xl text-green-500 mb-3" />
+                    <p className="text-gray-600 mb-1">
+                      {isDragging ? 'Drop your image here' : 'Drag & drop an image'}
+                    </p>
+                    <p className="text-sm text-gray-500">or click to browse files</p>
+                  </>
+                )}
+                <input
+                  id="fileInput"
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleUploadImage}
+                  disabled={!isAuthenticated && limitReached}
+                />
+              </div>
+            )}
 
             {/* Action Buttons */}
             <div className="flex flex-col sm:flex-row gap-3 mb-4">
               <button
                 onClick={handleTakePhoto}
-                disabled={!isAuthenticated && limitReached}
+                disabled={(!isAuthenticated && limitReached) || isCameraOpen}
                 className={`flex-1 flex items-center justify-center gap-2 bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors ${
-                  !isAuthenticated && limitReached ? 'opacity-50 cursor-not-allowed' : ''
+                  (!isAuthenticated && limitReached) || isCameraOpen ? 'opacity-50 cursor-not-allowed' : ''
                 }`}
               >
                 <FaCamera />
                 <span>Take Photo</span>
               </button>
 
-              <button
-                onClick={() => document.getElementById('fileInput')?.click()}
-                disabled={!isAuthenticated && limitReached}
-                className={`flex-1 flex items-center justify-center gap-2 bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors ${
-                  !isAuthenticated && limitReached ? 'opacity-50 cursor-not-allowed' : ''
-                }`}
-              >
-                <FaUpload />
-                <span>Upload Image</span>
-              </button>
+              {isCameraOpen && (
+                <>
+                  <button
+                    onClick={capturePhoto}
+                    className="flex-1 flex items-center justify-center gap-2 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    <FaCamera />
+                    <span>Capture Photo</span>
+                  </button>
+                  <button
+                    onClick={stopCamera}
+                    className="flex-1 flex items-center justify-center gap-2 bg-red-600 text-white py-2 px-4 rounded-lg hover:bg-red-700 transition-colors"
+                  >
+                    <span>Stop Camera</span>
+                  </button>
+                </>
+              )}
+
+              {!isCameraOpen && (
+                <button
+                  onClick={() => document.getElementById('fileInput')?.click()}
+                  disabled={!isAuthenticated && limitReached}
+                  className={`flex-1 flex items-center justify-center gap-2 bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors ${
+                    !isAuthenticated && limitReached ? 'opacity-50 cursor-not-allowed' : ''
+                  }`}
+                >
+                  <FaUpload />
+                  <span>Upload Image</span>
+                </button>
+              )}
             </div>
 
             {/* Submit Button */}
@@ -394,12 +490,12 @@ export default function VarietyIdentification() {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                   </svg>
-                  Identifying...
+                  Analyzing...
                 </>
               ) : (
                 <>
                   <FaCheck />
-                  Identify Variety
+                  Analyze Image
                 </>
               )}
             </button>
@@ -416,20 +512,23 @@ export default function VarietyIdentification() {
                 )}
               </div>
             )}
+
+            {/* Hidden Canvas for Capturing Photo */}
+            <canvas ref={canvasRef} className="hidden" />
           </div>
 
           {/* Right Column - Results & Info */}
           <div className="space-y-6">
             {/* Variety Result */}
             <div className="bg-white rounded-xl shadow-md p-6">
-              <h2 className="text-xl font-semibold mb-4 text-gray-800">Identification Results</h2>
+              <h2 className="text-xl font-semibold mb-4 text-gray-800">Identification</h2>
               {error && (
                 <div className="p-4 bg-red-50 rounded-lg border border-red-200 mb-4">
                   <p className="text-red-700">{error}</p>
                 </div>
               )}
               {variety ? (
-                <div className="p-4 bg-blue-100 rounded-lg shadow-md border border-blue-300">
+                <div className="p-4 bg-green-50 rounded-lg border border-green-200">
                   <h3 className="text-lg font-semibold text-gray-900 mb-3">Identification Result:</h3>
                   <div className="space-y-2 text-gray-800">
                     <p><span className="font-bold">Result:</span> {variety.result || 'N/A'}</p>
@@ -441,7 +540,7 @@ export default function VarietyIdentification() {
                   </div>
                 </div>
               ) : (
-                <p className="text-gray-600">No identification yet. Upload an image and click "Identify Variety" to get started.</p>
+                <p className="text-gray-600">No identification yet. Upload an image or take a photo and click "Analyze Image" to get started.</p>
               )}
             </div>
 
@@ -472,29 +571,29 @@ export default function VarietyIdentification() {
 
         {/* Modal for Sign-In/Sign-Up Prompt */}
         {showModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 max-w-sm w-full">
-              <h2 className="text-xl font-semibold mb-4 text-gray-800">Limit Reached</h2>
+          <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
+            <div className="bg-white rounded-xl p-8 max-w-md w-full shadow-lg">
+              <h2 className="text-2xl font-bold mb-4 text-gray-800">Guest Limit Reached</h2>
               <p className="text-gray-600 mb-6">
-                You have reached the maximum number of variety identification attempts (3/3). Please sign in or sign up to continue.
+                You've used all 3 guest attempts for variety identification. Sign in or create an account to enjoy unlimited access!
               </p>
               <div className="flex justify-between gap-4">
                 <Link href="/signin">
-                  <button className="bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors w-full">
+                  <button className="bg-green-600 text-white py-2 px-6 rounded-lg hover:bg-green-700 transition-colors w-full font-semibold">
                     Sign In
                   </button>
                 </Link>
                 <Link href="/signup">
-                  <button className="bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors w-full">
+                  <button className="bg-blue-600 text-white py-2 px-6 rounded-lg hover:bg-blue-700 transition-colors w-full font-semibold">
                     Sign Up
                   </button>
                 </Link>
               </div>
               <button
                 onClick={() => setShowModal(false)}
-                className="mt-4 text-gray-600 hover:underline w-full text-center"
+                className="mt-4 text-gray-600 hover:underline w-full text-center text-sm"
               >
-                Close
+                Continue as Guest (Limited)
               </button>
             </div>
           </div>

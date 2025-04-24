@@ -1,4 +1,3 @@
-// app/admin/users/page.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -18,13 +17,6 @@ interface User {
   lastLogin: string;
 }
 
-const getCookie = (name: string) => {
-  const value = `; ${document.cookie}`;
-  const parts = value.split(`; ${name}=`);
-  if (parts.length === 2) return parts.pop()?.split(';').shift();
-  return null;
-};
-
 export default function AdminUsers() {
   const [users, setUsers] = useState<User[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -43,12 +35,39 @@ export default function AdminUsers() {
 
   // Check admin role
   useEffect(() => {
-    const role = getCookie('role');
-    const token = getCookie('token');
+    const token = localStorage.getItem('authToken');
+    const userId = localStorage.getItem('userId');
 
-    if (!token || role !== 'ADMIN') {
+    if (!token || !userId) {
       router.push('/signin?redirect=/admin/users');
+      return;
     }
+
+    // Verify admin role
+    const verifyRole = async () => {
+      try {
+        const response = await fetch(`http://20.62.15.198:8080/api/users/username/${userId}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to verify user');
+        }
+
+        const user = await response.json();
+        if (user.role !== 'ADMIN') {
+          router.push('/home');
+        }
+      } catch (err) {
+        setError('Authentication failed');
+        router.push('/signin');
+      }
+    };
+
+    verifyRole();
   }, [router]);
 
   // Fetch users
@@ -57,18 +76,25 @@ export default function AdminUsers() {
       setIsLoading(true);
       setError(null);
 
-      try {
-        const token = getCookie('token');
-        if (!token) throw new Error('No authentication token found');
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        setError('No authentication token found');
+        router.push('/signin');
+        return;
+      }
 
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/users`, {
+      try {
+        const response = await fetch('http://20.62.15.198:8080/api/users', {
           method: 'GET',
           headers: {
-            'Authorization': `Bearer ${token}`,
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
           },
         });
 
-        if (!response.ok) throw new Error(`Failed to fetch users: ${response.status}`);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch users: ${response.status}`);
+        }
         const data = await response.json();
         setUsers(data);
       } catch (err) {
@@ -79,29 +105,37 @@ export default function AdminUsers() {
     };
 
     fetchUsers();
-  }, []);
+  }, [router]);
 
   // Search users
-  const filteredUsers = users.filter(user => 
-    user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    `${user.firstName} ${user.lastName}`.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredUsers = users.filter(
+    (user) =>
+      user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      `${user.firstName} ${user.lastName}`.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   // View user details
   const viewUserDetails = async (userId: string) => {
-    try {
-      const token = getCookie('token');
-      if (!token) throw new Error('No authentication token found');
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      setError('No authentication token found');
+      router.push('/signin');
+      return;
+    }
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/users/${userId}`, {
+    try {
+      const response = await fetch(`http://20.62.15.198:8080/api/users/${userId}`, {
         method: 'GET',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
         },
       });
 
-      if (!response.ok) throw new Error('Failed to fetch user details');
+      if (!response.ok) {
+        throw new Error('Failed to fetch user details');
+      }
       const userData = await response.json();
       setSelectedUser(userData);
       setEditForm({
@@ -120,21 +154,27 @@ export default function AdminUsers() {
   const deleteUser = async (userId: string) => {
     if (!confirm('Are you sure you want to delete this user?')) return;
 
-    try {
-      const token = getCookie('token');
-      if (!token) throw new Error('No authentication token found');
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      setError('No authentication token found');
+      router.push('/signin');
+      return;
+    }
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/users/delete/${userId}`, {
+    try {
+      const response = await fetch(`http://20.62.15.198:8080/api/users/delete/${userId}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
         },
       });
 
-      if (!response.ok) throw new Error('Failed to delete user');
-      
-      // Refresh user list
-      setUsers(users.filter(user => user.userID !== userId));
+      if (!response.ok) {
+        throw new Error('Failed to delete user');
+      }
+
+      setUsers(users.filter((user) => user.userID !== userId));
       if (selectedUser?.userID === userId) setSelectedUser(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete user');
@@ -143,24 +183,29 @@ export default function AdminUsers() {
 
   // Update user
   const updateUser = async (userId: string) => {
-    try {
-      const token = getCookie('token');
-      if (!token) throw new Error('No authentication token found');
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      setError('No authentication token found');
+      router.push('/signin');
+      return;
+    }
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/users/update/${userId}`, {
+    try {
+      const response = await fetch(`http://20.62.15.198:8080/api/users/update/${userId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(editForm),
       });
 
-      if (!response.ok) throw new Error('Failed to update user');
+      if (!response.ok) {
+        throw new Error('Failed to update user');
+      }
 
-      // Refresh user list and details
       const updatedUser = await response.json();
-      setUsers(users.map(user => user.userID === userId ? updatedUser : user));
+      setUsers(users.map((user) => (user.userID === userId ? updatedUser : user)));
       setSelectedUser(updatedUser);
       setEditMode(false);
     } catch (err) {
@@ -173,7 +218,7 @@ export default function AdminUsers() {
       <div className="max-w-7xl mx-auto bg-white rounded-lg shadow-md p-6">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold text-gray-800">User Management</h1>
-          <Link href="/" className="text-green-600 hover:underline">
+          <Link href="/admin/dashboard" className="text-green-600 hover:underline">
             Back to Dashboard
           </Link>
         </div>
@@ -220,9 +265,13 @@ export default function AdminUsers() {
                         </td>
                         <td className="py-3 px-4 border-b">{user.email}</td>
                         <td className="py-3 px-4 border-b">
-                          <span className={`px-2 py-1 text-xs rounded-full ${
-                            user.role === 'ADMIN' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'
-                          }`}>
+                          <span
+                            className={`px-2 py-1 text-xs rounded-full ${
+                              user.role === 'ADMIN'
+                                ? 'bg-purple-100 text-purple-800'
+                                : 'bg-blue-100 text-blue-800'
+                            }`}
+                          >
                             {user.role}
                           </span>
                         </td>
@@ -270,7 +319,9 @@ export default function AdminUsers() {
                         type="text"
                         className="w-full p-2 border rounded"
                         value={editForm.firstName}
-                        onChange={(e) => setEditForm({...editForm, firstName: e.target.value})}
+                        onChange={(e) =>
+                          setEditForm({ ...editForm, firstName: e.target.value })
+                        }
                       />
                     </div>
                     <div>
@@ -279,7 +330,9 @@ export default function AdminUsers() {
                         type="text"
                         className="w-full p-2 border rounded"
                         value={editForm.lastName}
-                        onChange={(e) => setEditForm({...editForm, lastName: e.target.value})}
+                        onChange={(e) =>
+                          setEditForm({ ...editForm, lastName: e.target.value })
+                        }
                       />
                     </div>
                     <div>
@@ -288,7 +341,7 @@ export default function AdminUsers() {
                         type="email"
                         className="w-full p-2 border rounded"
                         value={editForm.email}
-                        onChange={(e) => setEditForm({...editForm, email: e.target.value})}
+                        onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
                       />
                     </div>
                     <div>
@@ -297,7 +350,9 @@ export default function AdminUsers() {
                         type="text"
                         className="w-full p-2 border rounded"
                         value={editForm.contact}
-                        onChange={(e) => setEditForm({...editForm, contact: e.target.value})}
+                        onChange={(e) =>
+                          setEditForm({ ...editForm, contact: e.target.value })
+                        }
                       />
                     </div>
                     <div>
@@ -306,7 +361,9 @@ export default function AdminUsers() {
                         type="text"
                         className="w-full p-2 border rounded"
                         value={editForm.location}
-                        onChange={(e) => setEditForm({...editForm, location: e.target.value})}
+                        onChange={(e) =>
+                          setEditForm({ ...editForm, location: e.target.value })
+                        }
                       />
                     </div>
                     <div className="flex space-x-2 pt-2">
@@ -361,8 +418,9 @@ export default function AdminUsers() {
                     <div>
                       <p className="text-sm text-gray-600">Last Login</p>
                       <p className="font-medium">
-                        {selectedUser.lastLogin ? 
-                          new Date(selectedUser.lastLogin).toLocaleString() : 'Never'}
+                        {selectedUser.lastLogin
+                          ? new Date(selectedUser.lastLogin).toLocaleString()
+                          : 'Never'}
                       </p>
                     </div>
                   </div>
@@ -379,4 +437,3 @@ export default function AdminUsers() {
     </div>
   );
 }
-
