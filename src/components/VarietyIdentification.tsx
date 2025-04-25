@@ -1,137 +1,48 @@
 "use client";
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { FaCamera, FaUpload, FaCheck, FaHome } from 'react-icons/fa';
+import {
+  API_BASE_URL,
+  AnalysisResult,
+  useAuth,
+  useGuestState,
+  handleFileChange as handleImageFileChange,
+  processGuestResponse
+} from '@/utils/analysis';
 
 export default function VarietyIdentification() {
+  // Basic state management
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
-  const [variety, setVariety] = useState<any>(null);
+  const [variety, setVariety] = useState<AnalysisResult | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
 
-  // Device tracking state for guest users
-  const [deviceID, setDeviceID] = useState<string>("");
-  const [varietyAttempts, setVarietyAttempts] = useState<number>(0);
-  const [limitReached, setLimitReached] = useState<boolean>(false);
-  const [requiresSignup, setRequiresSignup] = useState<boolean>(false);
-
-  // Authenticated user state
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const [userId, setUserId] = useState<string | null>(null);
-  const [authToken, setAuthToken] = useState<string | null>(null);
+  // Auth state from custom hook
+  const { isAuthenticated, userId, authToken } = useAuth();
+  
+  // Guest state management
+  const [varietyAttempts, setVarietyAttempts] = useState(0);
+  const [limitReached, setLimitReached] = useState(false);
+  const [requiresSignup, setRequiresSignup] = useState(false);
+  const { deviceID } = useGuestState('variety');
 
   // Camera refs
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-
-  // API Base URL
-  const API_BASE_URL = "http://20.62.15.198:8080";
-
-  // Check authentication and device ID on component mount
+  // Clean up camera on unmount
   useEffect(() => {
-    const token = localStorage.getItem('authToken');
-    const storedUserId = localStorage.getItem('userId');
-
-    if (token && storedUserId) {
-      setIsAuthenticated(true);
-      setAuthToken(token);
-      setUserId(storedUserId);
-    } else {
-      const generateDeviceId = () => {
-        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-          const r = Math.random() * 16 | 0;
-          const v = c === 'x' ? r : (r & 0x3 | 0x8);
-          return v.toString(16);
-        });
-      };
-
-      let storedDeviceID = localStorage.getItem('banana_disease_device_id');
-      if (!storedDeviceID) {
-        storedDeviceID = generateDeviceId();
-        localStorage.setItem('banana_disease_device_id', storedDeviceID);
-      }
-
-      setDeviceID(storedDeviceID);
-      checkDeviceUsage(storedDeviceID);
-      checkVarietyLimit(storedDeviceID);
-    }
-
     return () => {
       stopCamera();
     };
   }, []);
-
-  // Function to check device usage from API (for guest users)
-  const checkDeviceUsage = async (id: string) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/guest/${id}`, {
-        method: "GET",
-        headers: {
-          'Accept': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        if (response.status === 403) {
-          setError("Access denied. Please sign in to continue.");
-          setLimitReached(true);
-          setRequiresSignup(true);
-          setShowModal(true);
-        } else if (response.status === 404) {
-          setVarietyAttempts(0);
-        } else {
-          setError(`Failed to check device usage: ${response.status}`);
-        }
-        return;
-      }
-
-      const data = await response.json();
-      setVarietyAttempts(data.varietyAttempts || 0);
-    } catch (error) {
-      console.error("Error checking device usage:", error);
-      setError("Network error. Please check your connection and try again.");
-    }
-  };
-
-  // Function to check if device has reached variety identification limit
-  const checkVarietyLimit = async (id: string) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/guest/variety/limit/${id}`, {
-        method: "GET",
-        headers: {
-          'Accept': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        if (response.status === 403) {
-          setError("Access denied. Please sign in to continue.");
-          setLimitReached(true);
-          setRequiresSignup(true);
-          setShowModal(true);
-        } else {
-          setError(`Failed to check variety limit: ${response.status}`);
-        }
-        return;
-      }
-
-      const limitStatus = await response.json();
-      setLimitReached(limitStatus.limitReached === true);
-      if (limitStatus.limitReached) {
-        setRequiresSignup(true);
-        setShowModal(true);
-        setError("You have reached the maximum number of variety identification attempts (3/3). Please sign in or sign up to continue.");
-      }
-    } catch (error) {
-      console.error("Error checking variety limit:", error);
-      setError("Network error. Please check your connection and try again.");
-    }
-  };
+  // Camera functions begin here...
 
   // Camera functions
   const startCamera = async () => {
@@ -152,13 +63,15 @@ export default function VarietyIdentification() {
         setIsCameraOpen(true);
         setError(null);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error accessing camera:", err);
       let errorMessage = "Failed to access camera. Please ensure camera permissions are granted.";
-      if (err.name === 'NotAllowedError') {
-        errorMessage = "Camera access denied. Please allow camera permissions in your browser settings.";
-      } else if (err.name === 'NotFoundError') {
-        errorMessage = "No camera found. Please upload an image instead.";
+      if (err && typeof err === 'object' && 'name' in err) {
+        if (err.name === 'NotAllowedError') {
+          errorMessage = "Camera access denied. Please allow camera permissions in your browser settings.";
+        } else if (err.name === 'NotFoundError') {
+          errorMessage = "No camera found. Please upload an image instead.";
+        }
       }
       setError(errorMessage);
       setIsCameraOpen(false);
@@ -208,18 +121,12 @@ export default function VarietyIdentification() {
       startCamera();
     }
   };
-
-  const handleFileChange = (file: File) => {
-    if (file && file.type.startsWith('image/')) {
-      setSelectedImage(file);
-      setVariety(null);
-      setError(null);
-    }
-  };
-
   const handleUploadImage = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (file) handleFileChange(file);
+    if (file) {
+      handleImageFileChange(file, setSelectedImage, setError);
+      setVariety(null);
+    }
   };
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
@@ -230,24 +137,18 @@ export default function VarietyIdentification() {
   const handleDragLeave = () => {
     setIsDragging(false);
   };
-
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragging(false);
     const file = e.dataTransfer.files?.[0];
-    if (file) handleFileChange(file);
+    if (file) {
+      handleImageFileChange(file, setSelectedImage, setError);
+      setVariety(null);
+    }
   };
-
   const handleSubmit = async () => {
     if (!selectedImage) {
       alert("Please select an image first.");
-      return;
-    }
-
-    if (!isAuthenticated && limitReached) {
-      setError("You have reached the maximum number of variety identification attempts. Please sign in to continue.");
-      setRequiresSignup(true);
-      setShowModal(true);
       return;
     }
 
@@ -274,12 +175,11 @@ export default function VarietyIdentification() {
           body: formData,
         });
 
-        if (!response.ok) {
-          if (response.status === 401) {
+        if (!response.ok) {          if (response.status === 401) {
             setError("Authentication failed. Please sign in again.");
             localStorage.removeItem('authToken');
             localStorage.removeItem('userId');
-            setIsAuthenticated(false);
+            window.location.href = '/auth/signin';
             setShowModal(true);
           } else if (response.status === 403) {
             setError("You do not have permission to perform this action.");
@@ -307,39 +207,31 @@ export default function VarietyIdentification() {
           result: latestVariety.varietyName,
           confidenceLevel: latestVariety.confidenceLevel,
           processingTime: latestVariety.processingTime,
-        });
-      } else {
+        });      } else {        // Guest user flow
         formData.append('deviceId', deviceID);
         response = await fetch(`${API_BASE_URL}/api/varieties/analyze`, {
           method: "POST",
           body: formData,
         });
 
+        const data = await response.json();
+        console.log("Variety analysis response:", data);
+        
+        const limitReached = processGuestResponse(data, {
+          setAttempts: setVarietyAttempts,
+          setLimitReached,
+          setRequiresSignup,
+          setShowModal,
+          setError
+        });
+
+        if (limitReached) return;
+
         if (!response.ok) {
-          if (response.status === 403 || response.status === 400) {
-            setLimitReached(true);
-            setRequiresSignup(true);
-            setShowModal(true);
-            setError("You have reached the maximum number of variety identification attempts (3/3). Please sign in or sign up to continue.");
-            return;
-          }
           throw new Error(`Failed to analyze image: ${response.status}`);
         }
 
-        const data = await response.json();
-        setVariety({
-          result: data.varietyName,
-          confidenceLevel: data.confidenceLevel,
-          processingTime: data.processingTime,
-        });
-        setVarietyAttempts(3 - (data.remainingAttempts || 0));
-
-        if (data.limitReached || data.requiresSignup) {
-          setRequiresSignup(true);
-          setLimitReached(true);
-          setShowModal(true);
-          setError("You have reached the maximum number of variety identification attempts (3/3). Please sign in or sign up to continue.");
-        }
+        setVariety(data);
       }
     } catch (error) {
       console.error("Error:", error);
@@ -372,9 +264,9 @@ export default function VarietyIdentification() {
                   You have reached the maximum number of variety identification attempts ({varietyAttempts}/3).
                   <span>
                     {' '}Please{' '}
-                    <Link href="/signin" className="text-green-600 hover:underline">sign in</Link>
+                    <Link href="/auth/signin" className="text-green-600 hover:underline">sign in</Link>
                     {' '}or{' '}
-                    <Link href="/signup" className="text-green-600 hover:underline">sign up</Link>
+                    <Link href="/auth/signup" className="text-green-600 hover:underline">sign up</Link>
                     {' '}to continue.
                   </span>
                 </p>
@@ -401,13 +293,14 @@ export default function VarietyIdentification() {
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
                 onClick={() => !(!isAuthenticated && limitReached) && document.getElementById('fileInput')?.click()}
-              >
-                {selectedImage ? (
+              >                {selectedImage ? (
                   <>
-                    <img
+                    <Image
                       src={URL.createObjectURL(selectedImage)}
-                      alt="Selected"
-                      className="max-h-48 max-w-full object-contain rounded-lg mb-2"
+                      alt="Selected banana image"
+                      width={192}
+                      height={192}
+                      className="max-h-48 w-auto object-contain rounded-lg mb-2"
                     />
                     <p className="text-sm text-gray-500 mt-2">Click or drag to change image</p>
                   </>
@@ -540,7 +433,7 @@ export default function VarietyIdentification() {
                   </div>
                 </div>
               ) : (
-                <p className="text-gray-600">No identification yet. Upload an image or take a photo and click "Analyze Image" to get started.</p>
+                <p className="text-gray-600">No identification yet. Upload an image or take a photo and click &quot;Analyze Image&quot; to get started.</p>
               )}
             </div>
 
@@ -575,15 +468,15 @@ export default function VarietyIdentification() {
             <div className="bg-white rounded-xl p-8 max-w-md w-full shadow-lg">
               <h2 className="text-2xl font-bold mb-4 text-gray-800">Guest Limit Reached</h2>
               <p className="text-gray-600 mb-6">
-                You've used all 3 guest attempts for variety identification. Sign in or create an account to enjoy unlimited access!
+                You&apos;ve used all 3 guest attempts for variety identification. Sign in or create an account to enjoy unlimited access!
               </p>
               <div className="flex justify-between gap-4">
-                <Link href="/signin">
+                <Link href="/auth/signin">
                   <button className="bg-green-600 text-white py-2 px-6 rounded-lg hover:bg-green-700 transition-colors w-full font-semibold">
                     Sign In
                   </button>
                 </Link>
-                <Link href="/signup">
+                <Link href="/auth/signup">
                   <button className="bg-blue-600 text-white py-2 px-6 rounded-lg hover:bg-blue-700 transition-colors w-full font-semibold">
                     Sign Up
                   </button>

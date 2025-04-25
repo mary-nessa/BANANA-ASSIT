@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { FiHome, FiEdit2, FiSave, FiGlobe, FiBell, FiTrash2, FiLogOut, FiChevronLeft, FiUser } from 'react-icons/fi';
+import { FiEdit2, FiSave, FiGlobe, FiBell, FiTrash2, FiLogOut, FiChevronLeft, FiUser } from 'react-icons/fi';
 
 export default function Settings() {
   const [language, setLanguage] = useState('English');
@@ -12,7 +12,6 @@ export default function Settings() {
     name: 'John Doe',
     email: 'john.doe@example.com',
   });
-  const [isLoading, setIsLoading] = useState(false);
 
   return (
     <div className="min-h-screen bg-green-50 p-3">

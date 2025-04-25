@@ -3,34 +3,12 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { FiSearch, FiBell, FiX, FiUser, FiSettings, FiLogOut } from 'react-icons/fi';
+import { FiSearch, FiBell, FiX, FiUser, FiLogOut } from 'react-icons/fi';
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-
-// Mock user data
-const MOCK_USER = {
-  name: "Hope Babirye",
-  email: "hope@gmail.com",
-  link: "/Settings"
-};
-
-const MOCK_NOTIFICATIONS = [
-  {
-    id: 1,
-    message: "Your banana disease scan results are ready",
-    timestamp: "2 minutes ago",
-    read: false,
-    link: "/disease-results/123"
-  },
-  {
-    id: 2,
-    message: "Gonja is rated among the best varieties",
-    timestamp: "1 hour ago",
-    read: false,
-    link: "/varieties"
-  },
-  
-];
+import { useAuth } from '@/utils/analysis';
+import { Notification, UserProfile } from '@/types';
+import { API_BASE_URL } from '@/utils/analysis';
 
 const SEARCHABLE_PAGES = [
   { 
@@ -63,17 +41,84 @@ const SEARCHABLE_PAGES = [
 
 export default function AppBar() {
   const router = useRouter();
+  const { isAuthenticated, userId, authToken } = useAuth();
+  
+  // UI state
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<typeof SEARCHABLE_PAGES>([]);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
-  const [notifications, setNotifications] = useState(MOCK_NOTIFICATIONS);
+  
+  // User data state
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   
+  // Refs for clickaway handling
   const searchRef = useRef<HTMLDivElement>(null);
   const notificationsRef = useRef<HTMLDivElement>(null);
-  const profileRef = useRef<HTMLDivElement>(null);
+  const profileRef = useRef<HTMLDivElement>(null);  // Fetch user details by ID
+  useEffect(() => {
+    const fetchUserDetails = async () => {
+      if (!isAuthenticated || !authToken || !userId) return;
+      
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/users/user/${userId}`, {
+          headers: {
+            'Authorization': `Bearer ${authToken}`
+          }
+        });
+
+      
+        
+        if (response.ok) {
+          const data = await response.json();
+          setUserProfile(data);
+        } else if (response.status === 401) {
+          // Token expired or invalid, clear auth data and redirect
+          localStorage.removeItem('authToken');
+          localStorage.removeItem('userId');
+          router.push('/auth/signin');
+        }
+      } catch (error) {
+        console.error('Error fetching user details:', error);
+      }
+    };    fetchUserDetails();
+  }, [isAuthenticated, authToken, userId, router]);
+
+  // Fetch notifications
+  useEffect(() => {
+    const fetchNotifications = async () => {
+      if (!isAuthenticated || !authToken) return;
+      
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/notifications`, {
+          headers: {
+            'Authorization': `Bearer ${authToken}`
+          }
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          setNotifications(data);
+        }
+      } catch (error) {
+        console.error('Error fetching notifications:', error);
+      }
+    };
+
+    fetchNotifications();
+    
+    // Optional: Set up WebSocket connection for real-time notifications
+    // const ws = new WebSocket(`${WS_URL}/notifications`);
+    // ws.onmessage = (event) => {
+    //   const newNotification = JSON.parse(event.data);
+    //   setNotifications(prev => [newNotification, ...prev]);
+    // };
+    
+    // return () => ws.close();
+  }, [isAuthenticated, authToken]);
 
   // Get user initials
   const getInitials = (name: string) => {
@@ -148,11 +193,27 @@ export default function AppBar() {
     setSearchOpen(false);
     setSearchQuery('');
   };
-
-  const handleLogout = () => {
-    // Add your logout logic here
-    console.log("User logged out");
-    router.push('/signin');
+  const handleLogout = async () => {
+    try {
+      // Call logout endpoint if it exists
+      if (authToken) {
+        await fetch(`${API_BASE_URL}/api/auth/logout`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${authToken}`
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Error during logout:', error);
+    } finally {
+      // Clear local storage
+      localStorage.removeItem('authToken');
+      localStorage.removeItem('userId');
+      
+      // Redirect to signin
+      router.push('/auth/signin');
+    }
   };
 
   return (
@@ -295,24 +356,21 @@ export default function AppBar() {
               onClick={() => setProfileOpen(!profileOpen)}
               className="flex items-center justify-center rounded-full h-10 w-10 bg-blue-100 focus:outline-none"
               aria-label="User profile"
-            >
-              <span className="font-bold text-blue-600 text-lg">
-                {getInitials(MOCK_USER.name)}
+            >              <span className="font-bold text-blue-600 text-lg">
+                {userProfile ? getInitials(userProfile.username) : ''}
               </span>
-            </button>
-
-            {profileOpen && (
+            </button>            {profileOpen && userProfile && (
               <div className="absolute right-0 mt-2 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
                 <div className="p-4 border-b border-gray-200">
                   <div className="flex items-center space-x-3">
                     <div className="rounded-full h-10 w-10 bg-blue-100 flex items-center justify-center">
                       <span className="font-bold text-blue-600 text-lg">
-                        {getInitials(MOCK_USER.name)}
+                        {getInitials(userProfile.username)}
                       </span>
                     </div>
                     <div>
-                      <p className="font-medium text-gray-800">{MOCK_USER.name}</p>
-                      <p className="text-sm text-gray-500">{MOCK_USER.email}</p>
+                      <p className="font-medium text-gray-800">{userProfile.username}</p>
+                      <p className="text-sm text-gray-500">{userProfile.email}</p>
                     </div>
                   </div>
                 </div>

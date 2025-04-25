@@ -1,7 +1,6 @@
 // app/layout.tsx
 import type { Metadata } from "next";
 import "./globals.css";
-import LayoutWrapper from "./layout-wrapper";
 
 export const metadata: Metadata = {
   title: "Banana Assist",
@@ -18,9 +17,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>
-        <LayoutWrapper>{children}</LayoutWrapper>
-      </body>
+      <body>{children}</body>
     </html>
   );
 }

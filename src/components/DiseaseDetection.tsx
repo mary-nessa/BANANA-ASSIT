@@ -1,122 +1,43 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { FaCamera, FaUpload, FaCheck, FaHome } from 'react-icons/fa';
+import {
+  API_BASE_URL,
+  AnalysisResult,
+  useAuth,
+  useGuestState,
+  handleFileChange,
+  processGuestResponse
+} from '@/utils/analysis';
 
 export default function DiseaseDetection() {
+  // Basic state management
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
-  const [diagnosis, setDiagnosis] = useState<any>(null);
+  const [diagnosis, setDiagnosis] = useState<AnalysisResult | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
-
-  // Device tracking state for guest users
-  const [deviceID, setDeviceID] = useState<string>("");
-  const [diseaseAttempts, setDiseaseAttempts] = useState<number>(0);
-  const [limitReached, setLimitReached] = useState<boolean>(false);
-  const [requiresSignup, setRequiresSignup] = useState<boolean>(false);
-
-  // Authenticated user state
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const [userId, setUserId] = useState<string | null>(null);
-  const [authToken, setAuthToken] = useState<string | null>(null);
-
-  // API Base URL (updated to match the documentation)
-  const API_BASE_URL = "http://20.62.15.198:8080";
-
-  // Check authentication and device ID on component mount
-  useEffect(() => {
-    // Check if user is authenticated
-    const token = localStorage.getItem('authToken');
-    const storedUserId = localStorage.getItem('userId');
-
-    if (token && storedUserId) {
-      setIsAuthenticated(true);
-      setAuthToken(token);
-      setUserId(storedUserId);
-    } else {
-      // Generate or retrieve device ID for guest users
-      const generateDeviceId = () => {
-        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-          const r = Math.random() * 16 | 0;
-          const v = c === 'x' ? r : (r & 0x3 | 0x8);
-          return v.toString(16);
-        });
-      };
-
-      let storedDeviceID = localStorage.getItem('banana_disease_device_id');
-      if (!storedDeviceID) {
-        storedDeviceID = generateDeviceId();
-        localStorage.setItem('banana_disease_device_id', storedDeviceID);
-      }
-
-      setDeviceID(storedDeviceID);
-      checkDeviceUsage(storedDeviceID);
-      checkDiseaseLimit(storedDeviceID);
-    }
-  }, []);
-
-  // Function to check device usage from API (for guest users)
-  const checkDeviceUsage = async (id: string) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/guest/${id}`, {
-        method: "GET",
-        headers: {
-          'Accept': 'application/json',
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setDiseaseAttempts(data.diseaseAttempts || 0);
-      } else if (response.status === 404) {
-        setDiseaseAttempts(0);
-      }
-    } catch (error) {
-      console.error("Error checking device usage:", error);
-    }
-  };
-
-  // Function to check if device has reached disease detection limit (for guest users)
-  const checkDiseaseLimit = async (id: string) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/guest/disease/limit/${id}`, {
-        method: "GET",
-        headers: {
-          'Accept': 'application/json',
-        },
-      });
-
-      if (response.ok) {
-        const limitStatus = await response.json();
-        setLimitReached(limitStatus === true);
-        if (limitStatus) {
-          setRequiresSignup(true);
-          setShowModal(true);
-        }
-      }
-    } catch (error) {
-      console.error("Error checking disease limit:", error);
-    }
-  };
+  // Auth state from custom hook
+  const { isAuthenticated, userId, authToken } = useAuth();
+  
+  // Guest state management
+  const [diseaseAttempts, setDiseaseAttempts] = useState(0);
+  const [limitReached, setLimitReached] = useState(false);
+  const [requiresSignup, setRequiresSignup] = useState(false);
+  const { deviceID } = useGuestState('disease');
 
   const handleTakePhoto = () => {
     alert("Camera functionality will open your device camera when implemented.");
-  };
-
-  const handleFileChange = (file: File) => {
-    if (file && file.type.startsWith('image/')) {
-      setSelectedImage(file);
-      setDiagnosis(null);
-      setError(null);
-    }
-  };
-
-  const handleUploadImage = (event: React.ChangeEvent<HTMLInputElement>) => {
+  };  const handleUploadImage = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (file) handleFileChange(file);
+    if (file) {
+      handleFileChange(file, setSelectedImage, setError);
+      setDiagnosis(null);
+    }
   };
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
@@ -132,20 +53,14 @@ export default function DiseaseDetection() {
     e.preventDefault();
     setIsDragging(false);
     const file = e.dataTransfer.files?.[0];
-    if (file) handleFileChange(file);
+    if (file) {
+      handleFileChange(file, setSelectedImage, setError);
+      setDiagnosis(null);
+    }
   };
-
   const handleSubmit = async () => {
     if (!selectedImage) {
       alert("Please select an image first.");
-      return;
-    }
-
-    // For guest users, check attempt limit
-    if (!isAuthenticated && limitReached) {
-      setError("You have reached the maximum number of disease detection attempts. Please sign in to continue.");
-      setRequiresSignup(true);
-      setShowModal(true);
       return;
     }
 
@@ -203,35 +118,31 @@ export default function DiseaseDetection() {
           confidenceLevel: latestDiagnosis.confidenceLevel,
           processingTime: latestDiagnosis.processingTime,
           secondaryFindings: latestDiagnosis.secondaryFindings,
-        });
+        });      
       } else {
         // Guest user: Use /api/diagnoses/analyze
         formData.append('deviceId', deviceID);
         response = await fetch(`${API_BASE_URL}/api/diagnoses/analyze`, {
           method: "POST",
           body: formData,
+        });        const data = await response.json();
+        console.log("Diagnosis data:", data);
+        
+        const limitReached = processGuestResponse(data, {
+          setAttempts: setDiseaseAttempts,
+          setLimitReached,
+          setRequiresSignup,
+          setShowModal,
+          setError
         });
 
+        if (limitReached) return;
+
         if (!response.ok) {
-          if (response.status === 400) {
-            setLimitReached(true);
-            setRequiresSignup(true);
-            setShowModal(true);
-            setError("You have reached the maximum number of disease detection attempts. Please sign in to continue.");
-            return;
-          }
           throw new Error(`Failed to analyze image: ${response.status}`);
         }
 
-        const data = await response.json();
         setDiagnosis(data);
-        setDiseaseAttempts(3 - (data.remainingAttempts || 0));
-
-        if (data.requiresSignup) {
-          setRequiresSignup(true);
-          setLimitReached(true);
-          setShowModal(true);
-        }
       }
     } catch (error) {
       console.error("Error:", error);
@@ -264,9 +175,9 @@ export default function DiseaseDetection() {
                   You have reached the maximum number of disease detection attempts ({diseaseAttempts}/3).
                   <span>
                     {' '}Please{' '}
-                    <Link href="/signin" className="text-green-600 hover:underline">sign in</Link>
+                    <Link href="/suth/signin" className="text-green-600 hover:underline">sign in</Link>
                     {' '}or{' '}
-                    <Link href="/signup" className="text-green-600 hover:underline">sign up</Link>
+                    <Link href="/auth/signup" className="text-green-600 hover:underline">sign up</Link>
                     {' '}to continue.
                   </span>
                 </p>
@@ -284,15 +195,17 @@ export default function DiseaseDetection() {
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
               onClick={() => document.getElementById('fileInput')?.click()}
-            >
-              {selectedImage ? (
+            >              {selectedImage ? (
                 <>
-                  <img
-                    src={URL.createObjectURL(selectedImage)}
-                    alt="Selected"
-                    className="max-h-48 max-w-full object-contain rounded-lg mb-2"
-                  />
-                  <p className="text-sm text-gray-500 mt-2">Click|Click or drag to change image</p>
+                  <div className="relative h-48 w-full">
+                    <Image
+                      src={URL.createObjectURL(selectedImage)}
+                      alt="Selected banana leaf"
+                      fill
+                      className="object-contain rounded-lg"
+                    />
+                  </div>
+                  <p className="text-sm text-gray-500 mt-2">Click or drag to change image</p>
                 </>
               ) : (
                 <>
@@ -411,7 +324,7 @@ export default function DiseaseDetection() {
                   </div>
                 </div>
               ) : (
-                <p className="text-gray-600">No diagnosis yet. Upload an image and click "Analyze Image" to get started.</p>
+                <p className="text-gray-600">No diagnosis yet. Upload an image and click &quot;Analyze Image&quot; to get started.</p>
               )}
             </div>
 
@@ -449,12 +362,12 @@ export default function DiseaseDetection() {
                 You have reached the maximum number of disease detection attempts (3/3). Please sign in or sign up to continue.
               </p>
               <div className="flex justify-between gap-4">
-                <Link href="/signin">
+                <Link href="/auth/signin">
                   <button className="bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors w-full">
                     Sign In
                   </button>
                 </Link>
-                <Link href="/signup">
+                <Link href="/auth/signup">
                   <button className="bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors w-full">
                     Sign Up
                   </button>

@@ -8,18 +8,19 @@ import {
   FiHome, 
   FiCamera, 
   FiGrid, 
-  FiMessageSquare, 
   FiSettings, 
   FiLogIn, 
   FiUserPlus,
   FiMenu,
   FiX
 } from 'react-icons/fi';
+import { useAuth } from '@/utils/analysis';
 
 export default function Sidebar() {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const { isAuthenticated } = useAuth();
 
   // Set initial state and handle resize
   useEffect(() => {
@@ -94,24 +95,24 @@ export default function Sidebar() {
             active={isActive('/settings')}
             icon={<FiSettings size={20} />}
             label="Settings"
-          />
-
-          {/* Auth Links */}
-          <div className="mt-auto space-y-2">
-            <NavLink
-              href="/signin"
-              active={isActive('/signin')}
-              icon={<FiLogIn size={20} />}
-              label="Sign In"
-            />
-            
-            <NavLink
-              href="/signup"
-              active={isActive('/signup')}
-              icon={<FiUserPlus size={20} />}
-              label="Sign Up"
-            />
-          </div>
+          />          {/* Auth Links - Only show when not authenticated */}
+          {!isAuthenticated && (
+            <div className="mt-auto space-y-2">
+              <NavLink
+                href="/auth/signin"
+                active={isActive('/auth/signin')}
+                icon={<FiLogIn size={20} />}
+                label="Sign In"
+              />
+              
+              <NavLink
+                href="/auth/signup"
+                active={isActive('/auth/signup')}
+                icon={<FiUserPlus size={20} />}
+                label="Sign Up"
+              />
+            </div>
+          )}
         </div>
       </nav>
 
