@@ -13,18 +13,38 @@ import {
   processGuestResponse
 } from '@/utils/analysis';
 
+interface SecondaryFindings {
+  severity: 'low' | 'medium' | 'high';
+  affectedArea: string;
+}
+
+interface DiagnosisResponse {
+  diagnosisID: string;
+  diseaseName: string;
+  confidenceLevel: number;
+  processingTime: number;
+  secondaryFindings: SecondaryFindings;
+}
+
+interface GuestDiagnosisResponse {
+  result: string;
+  confidenceLevel: number;
+  processingTime: number;
+  secondaryFindings: SecondaryFindings;
+  remainingAttempts: number;
+  requiresSignup: boolean;
+}
+
 export default function DiseaseDetection() {
-  // Basic state management
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [diagnosis, setDiagnosis] = useState<AnalysisResult | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
-  // Auth state from custom hook
+  
   const { isAuthenticated, userId, authToken } = useAuth();
   
-  // Guest state management
   const [diseaseAttempts, setDiseaseAttempts] = useState(0);
   const [limitReached, setLimitReached] = useState(false);
   const [requiresSignup, setRequiresSignup] = useState(false);
@@ -32,7 +52,9 @@ export default function DiseaseDetection() {
 
   const handleTakePhoto = () => {
     alert("Camera functionality will open your device camera when implemented.");
-  };  const handleUploadImage = (event: React.ChangeEvent<HTMLInputElement>) => {
+  };
+
+  const handleUploadImage = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
       handleFileChange(file, setSelectedImage, setError);
@@ -58,6 +80,7 @@ export default function DiseaseDetection() {
       setDiagnosis(null);
     }
   };
+
   const handleSubmit = async () => {
     if (!selectedImage) {
       alert("Please select an image first.");
@@ -71,16 +94,14 @@ export default function DiseaseDetection() {
       const formData = new FormData();
       formData.append('imageFile', selectedImage);
 
-      let response;
-
       if (isAuthenticated) {
-        // Authenticated user: Use /api/diagnoses/create
+        // Authenticated user flow
         if (!userId || !authToken) {
           throw new Error("User authentication data missing.");
         }
 
         formData.append('userId', userId);
-        response = await fetch(`${API_BASE_URL}/api/diagnoses/create`, {
+        const response = await fetch(`${API_BASE_URL}/api/diagnoses/create`, {
           method: "POST",
           headers: {
             'Authorization': `Bearer ${authToken}`,
@@ -89,44 +110,26 @@ export default function DiseaseDetection() {
         });
 
         if (!response.ok) {
-          if (response.status === 401) {
-            throw new Error("Authentication failed. Please sign in again.");
-          } else if (response.status === 404) {
-            throw new Error("User not found.");
-          }
-          throw new Error(`Failed to create diagnosis: ${response.status}`);
+          const errorData = await response.json();
+          throw new Error(errorData.message || `Failed with status ${response.status}`);
         }
 
-        // /api/diagnoses/create returns an empty response on success
-        // Fetch the diagnosis result using /api/diagnoses/user/{userId}
-        const diagnosisResponse = await fetch(`${API_BASE_URL}/api/diagnoses/user/${userId}`, {
-          method: "GET",
-          headers: {
-            'Authorization': `Bearer ${authToken}`,
-            'Accept': 'application/json',
-          },
-        });
-
-        if (!diagnosisResponse.ok) {
-          throw new Error(`Failed to fetch diagnosis: ${diagnosisResponse.status}`);
-        }
-
-        const diagnosisData = await diagnosisResponse.json();
-        const latestDiagnosis = diagnosisData[diagnosisData.length - 1]; // Get the most recent diagnosis
+        const diagnosisData: DiagnosisResponse = await response.json();
         setDiagnosis({
-          result: latestDiagnosis.diseaseName,
-          confidenceLevel: latestDiagnosis.confidenceLevel,
-          processingTime: latestDiagnosis.processingTime,
-          secondaryFindings: latestDiagnosis.secondaryFindings,
-        });      
+          result: diagnosisData.diseaseName,
+          confidenceLevel: diagnosisData.confidenceLevel,
+          processingTime: diagnosisData.processingTime,
+          secondaryFindings: diagnosisData.secondaryFindings,
+        });
       } else {
-        // Guest user: Use /api/diagnoses/analyze
+        // Guest user flow
         formData.append('deviceId', deviceID);
-        response = await fetch(`${API_BASE_URL}/api/diagnoses/analyze`, {
+        const response = await fetch(`${API_BASE_URL}/api/diagnoses/analyze`, {
           method: "POST",
           body: formData,
-        });        const data = await response.json();
-        console.log("Diagnosis data:", data);
+        });
+
+        const data: GuestDiagnosisResponse = await response.json();
         
         const limitReached = processGuestResponse(data, {
           setAttempts: setDiseaseAttempts,
@@ -142,7 +145,12 @@ export default function DiseaseDetection() {
           throw new Error(`Failed to analyze image: ${response.status}`);
         }
 
-        setDiagnosis(data);
+        setDiagnosis({
+          result: data.result,
+          confidenceLevel: data.confidenceLevel,
+          processingTime: data.processingTime,
+          secondaryFindings: data.secondaryFindings,
+        });
       }
     } catch (error) {
       console.error("Error:", error);
@@ -155,7 +163,6 @@ export default function DiseaseDetection() {
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="max-w-4xl mx-auto">
-        {/* Header Section */}
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-2xl md:text-3xl font-bold text-green-600">Banana Disease Detection</h1>
           <Link href="/home" className="flex items-center text-green-600 hover:text-green-800 transition-colors">
@@ -165,7 +172,6 @@ export default function DiseaseDetection() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Left Column - Image Upload */}
           <div className="bg-white rounded-xl shadow-md p-6">
             <h2 className="text-xl font-semibold mb-4 text-gray-800">Upload Banana Leaf Image</h2>
 
@@ -175,7 +181,7 @@ export default function DiseaseDetection() {
                   You have reached the maximum number of disease detection attempts ({diseaseAttempts}/3).
                   <span>
                     {' '}Please{' '}
-                    <Link href="/suth/signin" className="text-green-600 hover:underline">sign in</Link>
+                    <Link href="/auth/signin" className="text-green-600 hover:underline">sign in</Link>
                     {' '}or{' '}
                     <Link href="/auth/signup" className="text-green-600 hover:underline">sign up</Link>
                     {' '}to continue.
@@ -184,7 +190,6 @@ export default function DiseaseDetection() {
               </div>
             )}
 
-            {/* Drag & Drop Area */}
             <div
               className={`w-full h-64 border-2 ${
                 isDragging ? 'border-green-500 bg-green-50' : 'border-dashed border-gray-300'
@@ -195,7 +200,8 @@ export default function DiseaseDetection() {
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
               onClick={() => document.getElementById('fileInput')?.click()}
-            >              {selectedImage ? (
+            >
+              {selectedImage ? (
                 <>
                   <div className="relative h-48 w-full">
                     <Image
@@ -226,7 +232,6 @@ export default function DiseaseDetection() {
               />
             </div>
 
-            {/* Action Buttons */}
             <div className="flex flex-col sm:flex-row gap-3 mb-4">
               <button
                 onClick={handleTakePhoto}
@@ -251,7 +256,6 @@ export default function DiseaseDetection() {
               </button>
             </div>
 
-            {/* Submit Button */}
             <button
               onClick={handleSubmit}
               disabled={!selectedImage || isLoading || (!isAuthenticated && limitReached)}
@@ -275,23 +279,20 @@ export default function DiseaseDetection() {
               )}
             </button>
 
-            {/* Usage Info */}
             {!isAuthenticated && (
               <div className="mt-4 text-sm text-gray-500">
                 <p>Disease detection attempts: {diseaseAttempts}/3</p>
                 {requiresSignup && (
                   <p className="text-green-600 mt-2">
                     Want unlimited access?{' '}
-                    <Link href="/signup" className="font-semibold hover:underline">Sign up now</Link>
+                    <Link href="/auth/signup" className="font-semibold hover:underline">Sign up now</Link>
                   </p>
                 )}
               </div>
             )}
           </div>
 
-          {/* Right Column - Results & Info */}
           <div className="space-y-6">
-            {/* Diagnosis Result */}
             <div className="bg-white rounded-xl shadow-md p-6">
               <h2 className="text-xl font-semibold mb-4 text-gray-800">Diagnosis</h2>
               {error && (
@@ -318,17 +319,16 @@ export default function DiseaseDetection() {
                         )}
                       </>
                     )}
-                    {!isAuthenticated && diagnosis.remainingAttempts !== undefined && (
+                    {!isAuthenticated && 'remainingAttempts' in diagnosis && (
                       <p><span className="font-bold">Remaining Attempts:</span> {diagnosis.remainingAttempts}</p>
                     )}
                   </div>
                 </div>
               ) : (
-                <p className="text-gray-600">No diagnosis yet. Upload an image and click &quot;Analyze Image&quot; to get started.</p>
+                <p className="text-gray-600">No diagnosis yet. Upload an image and click "Analyze Image" to get started.</p>
               )}
             </div>
 
-            {/* Tips Section */}
             <div className="bg-white rounded-xl shadow-md p-6">
               <h2 className="text-xl font-semibold mb-3 text-gray-800">Tips for Best Results</h2>
               <ul className="space-y-2 text-gray-700">
@@ -353,7 +353,6 @@ export default function DiseaseDetection() {
           </div>
         </div>
 
-        {/* Modal for Sign-In/Sign-Up Prompt */}
         {showModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-lg p-6 max-w-sm w-full">

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import {AlertCircle, Search, Download } from 'lucide-react';
+import { AlertCircle, Search, Download, Trash2 } from 'lucide-react';
 import { API_BASE_URL } from '@/utils/analysis';
 
 interface Feedback {
@@ -11,7 +11,7 @@ interface Feedback {
   userName: string;
   rating: number;
   comment: string;
-  category: 'disease_detection' | 'variety_identification' | 'chatbot' | 'general';
+  category: 'DISEASE_DETECTION' | 'VARIETY_IDENTIFICATION' | 'CHATBOT' | 'GENERAL';
   timestamp: string;
 }
 
@@ -30,7 +30,7 @@ export default function FeedbackPage() {
       try {
         const token = document.cookie
           .split('; ')
-          .find(row => row.startsWith('authToken='))
+          .find((row) => row.startsWith('authToken='))
           ?.split('=')[1];
 
         if (!token) {
@@ -45,6 +45,9 @@ export default function FeedbackPage() {
           },
         });
 
+        if (response.status === 403) {
+          throw new Error('Access denied');
+        }
         if (!response.ok) {
           throw new Error('Failed to fetch feedback');
         }
@@ -65,21 +68,19 @@ export default function FeedbackPage() {
   useEffect(() => {
     let filtered = [...feedback];
 
-    // Apply category filter
     if (categoryFilter !== 'all') {
-      filtered = filtered.filter(item => item.category === categoryFilter);
+      filtered = filtered.filter((item) => item.category === categoryFilter);
     }
 
-    // Apply rating filter
     if (ratingFilter !== 'all') {
-      filtered = filtered.filter(item => item.rating === Number(ratingFilter));
+      filtered = filtered.filter((item) => item.rating === Number(ratingFilter));
     }
 
-    // Apply search filter
     if (searchTerm) {
-      filtered = filtered.filter(item =>
-        item.comment.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.userName.toLowerCase().includes(searchTerm.toLowerCase())
+      filtered = filtered.filter(
+        (item) =>
+          item.comment.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          item.userName.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
 
@@ -95,14 +96,16 @@ export default function FeedbackPage() {
   const exportFeedback = () => {
     const csv = [
       ['Date', 'User', 'Category', 'Rating', 'Comment'],
-      ...filteredFeedback.map(item => [
+      ...filteredFeedback.map((item) => [
         new Date(item.timestamp).toLocaleString(),
         item.userName,
-        item.category,
+        item.category.replace('_', ' '),
         item.rating,
-        item.comment
-      ])
-    ].map(row => row.join(',')).join('\n');
+        item.comment,
+      ]),
+    ]
+      .map((row) => row.join(','))
+      .join('\n');
 
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -113,6 +116,44 @@ export default function FeedbackPage() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  };
+
+  const handleDeleteFeedback = async (id: string) => {
+    try {
+      const token = document.cookie
+        .split('; ')
+        .find((row) => row.startsWith('authToken='))
+        ?.split('=')[1];
+
+      if (!token) {
+        router.replace('/auth/signin');
+        return;
+      }
+
+      const response = await fetch(`${API_BASE_URL}/api/feedback/${id}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
+      if (response.status === 404) {
+        throw new Error('Feedback not found');
+      }
+      if (!response.ok) {
+        throw new Error('Failed to delete feedback');
+      }
+
+      setFeedback(feedback.filter((item) => item.id !== id));
+      setFilteredFeedback(filteredFeedback.filter((item) => item.id !== id));
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete feedback');
+    }
   };
 
   return (
@@ -154,7 +195,7 @@ export default function FeedbackPage() {
         <div className="bg-white p-6 rounded-lg shadow-md">
           <h3 className="text-sm font-medium text-gray-500">5-Star Reviews</h3>
           <p className="mt-2 text-3xl font-semibold text-gray-900">
-            {filteredFeedback.filter(f => f.rating === 5).length}
+            {filteredFeedback.filter((f) => f.rating === 5).length}
           </p>
         </div>
       </div>
@@ -179,10 +220,10 @@ export default function FeedbackPage() {
           className="border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
         >
           <option value="all">All Categories</option>
-          <option value="disease_detection">Disease Detection</option>
-          <option value="variety_identification">Variety Identification</option>
-          <option value="chatbot">Chatbot</option>
-          <option value="general">General</option>
+          <option value="DISEASE_DETECTION">Disease Detection</option>
+          <option value="VARIETY_IDENTIFICATION">Variety Identification</option>
+          <option value="CHATBOT">Chatbot</option>
+          <option value="GENERAL">General</option>
         </select>
         <select
           value={ratingFilter}
@@ -224,6 +265,9 @@ export default function FeedbackPage() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Comment
                   </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
@@ -237,12 +281,17 @@ export default function FeedbackPage() {
                       <div className="text-sm text-gray-500">{item.userId}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                        item.category === 'disease_detection' ? 'bg-red-100 text-red-800' :
-                        item.category === 'variety_identification' ? 'bg-green-100 text-green-800' :
-                        item.category === 'chatbot' ? 'bg-blue-100 text-blue-800' :
-                        'bg-gray-100 text-gray-800'
-                      }`}>
+                      <span
+                        className={`px-2 py-1 text-xs font-medium rounded-full ${
+                          item.category === 'DISEASE_DETECTION'
+                            ? 'bg-red-100 text-red-800'
+                            : item.category === 'VARIETY_IDENTIFICATION'
+                            ? 'bg-green-100 text-green-800'
+                            : item.category === 'CHATBOT'
+                            ? 'bg-blue-100 text-blue-800'
+                            : 'bg-gray-100 text-gray-800'
+                        }`}
+                      >
                         {item.category.replace('_', ' ')}
                       </span>
                     </td>
@@ -251,6 +300,15 @@ export default function FeedbackPage() {
                     </td>
                     <td className="px-6 py-4">
                       <p className="text-sm text-gray-900 max-w-lg">{item.comment}</p>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <button
+                        onClick={() => handleDeleteFeedback(item.id)}
+                        className="text-red-600 hover:text-red-800"
+                        title="Delete Feedback"
+                      >
+                        <Trash2 className="h-5 w-5" />
+                      </button>
                     </td>
                   </tr>
                 ))}

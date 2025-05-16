@@ -8,6 +8,8 @@ type Message = {
   sender: 'user' | 'bot';
 };
 
+const API_BASE_URL = 'http://20.62.15.198:8080';
+
 export default function ChatbotPage() {
   const [messages, setMessages] = useState<Message[]>([
     { text: "Hello! I'm your Banana Farming Assistant. How can I help you today?", sender: 'bot' }
@@ -30,11 +32,11 @@ export default function ChatbotPage() {
     setIsLoading(true);
 
     try {
-      const botResponse = await simulateAIResponse(inputValue);
+      const botResponse = await sendMessageToAPI(inputValue);
       setMessages(prev => [...prev, { text: botResponse, sender: 'bot' }]);
-    } catch (error) {
+    } catch (error: any) {
       setMessages(prev => [...prev, { 
-        text: "Sorry, I encountered an error. Please try again later.", 
+        text: error.message || "Sorry I encountered an error Please try again later", 
         sender: 'bot' 
       }]);
     } finally {
@@ -42,19 +44,40 @@ export default function ChatbotPage() {
     }
   };
 
-  const simulateAIResponse = async (question: string): Promise<string> => {
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    const questionLower = question.toLowerCase();
-    
-    if (questionLower.includes('disease')) {
-      return "Common banana diseases include Panama disease and Black Sigatoka. Ensure proper spacing between plants for prevention.";
-    } else if (questionLower.includes('water')) {
-      return "Bananas need about 4-6 inches of water per month with good drainage.";
-    } else if (questionLower.includes('fertilizer')) {
-      return "Use a balanced fertilizer with a 3:1:6 NPK ratio for optimal growth.";
-    } else {
-      return "I specialize in banana farming advice. Could you please clarify your question?";
+  const cleanPunctuation = (text: string) => {
+    return text.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, '').trim();
+  };
+
+  const sendMessageToAPI = async (message: string): Promise<string> => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({ message }),
+      });
+
+      if (response.status === 200) {
+        const data = await response.json();
+        console.log('API 200 response:', data);
+        const cleanedResponse = cleanPunctuation(data.text || data.message || JSON.stringify(data) || "Message processed but no response content provided");
+        return cleanedResponse;
+      } else if (response.status === 400) {
+        const data = await response.json();
+        console.log('API 400 response:', data);
+        throw new Error(data.error || "Empty message received by the server");
+      } else if (response.status === 500) {
+        const data = await response.json();
+        console.log('API 500 response:', data);
+        throw new Error(data.error || "Server error Please try again later");
+      } else {
+        throw new Error(`Unexpected response status: ${response.status}`);
+      }
+    } catch (error: any) {
+      console.error('API error:', error);
+      throw new Error(error.message || "Failed to communicate with the server");
     }
   };
 
@@ -109,7 +132,6 @@ export default function ChatbotPage() {
         <div ref={messagesEndRef} />
       </div>
       
-      {/* Modified input form - narrower and right-aligned */}
       <form onSubmit={handleSubmit} className="p-4 border-t border-gray-200 bg-white flex justify-end">
         <div className="flex w-full max-w-md">
           <input

@@ -7,9 +7,12 @@ import { API_BASE_URL } from '@/utils/analysis';
 import StatsCard from '@/components/admin/dashboard/StatsCard';
 import RecentActivity from '@/components/admin/dashboard/RecentActivity';
 
-interface User {
-  lastLogin: string;
-  createdAt: string;
+interface ActivityLog {
+  id: string;
+  type: 'diagnosis' | 'identification' | 'user_login' | 'user_register';
+  user: string;
+  details: string;
+  timestamp: string;
 }
 
 interface DashboardStats {
@@ -19,14 +22,6 @@ interface DashboardStats {
   activeUsers: number;
   accuracyRate: number;
   monthlyGrowth: number;
-}
-
-interface ActivityLog {
-  id: string;
-  type: 'diagnosis' | 'identification' | 'user_login' | 'user_register';
-  user: string;
-  details: string;
-  timestamp: string;
 }
 
 export default function AdminDashboard() {
@@ -54,7 +49,7 @@ export default function AdminDashboard() {
         router.replace('/auth/signin');
         return;
       }
-      
+
       setIsLoading(true);
       setError(null);
 
@@ -64,52 +59,37 @@ export default function AdminDashboard() {
           'Content-Type': 'application/json',
         };
 
-        const [usersResponse, diagnosesResponse, varietiesResponse, activitiesResponse] = 
-          await Promise.all([
-            fetch(`${API_BASE_URL}/api/users`, { headers }),
-            fetch(`${API_BASE_URL}/api/diagnoses/disease/`, { headers }),
-            fetch(`${API_BASE_URL}/api/varieties/`, { headers }),
-            fetch(`${API_BASE_URL}/api/activity-logs`, { headers })
-          ]);
+        const response = await fetch(`${API_BASE_URL}/api/admin/dashboard`, { headers });
 
-        if (!usersResponse.ok) throw new Error('Failed to fetch users');
-        if (!diagnosesResponse.ok) throw new Error('Failed to fetch diagnoses');
-        if (!varietiesResponse.ok) throw new Error('Failed to fetch varieties');
-        if (!activitiesResponse.ok) throw new Error('Failed to fetch activities');
+        if (!response.ok) {
+          if (response.status === 403) {
+            throw new Error('Access denied - Requires admin privileges');
+          } else if (response.status === 500) {
+            throw new Error('Internal server error while gathering dashboard data');
+          } else {
+            throw new Error('Failed to fetch dashboard data');
+          }
+        }
 
-        const users: User[] = await usersResponse.json();
-        const diagnoses = await diagnosesResponse.json();
-        const varieties = await varietiesResponse.json();
-        const recentActivities = await activitiesResponse.json();
+        const data = await response.json();
+        // Console log the raw API response
+        console.log('Dashboard API Response:', JSON.stringify(data, null, 2));
 
-        // Calculate metrics
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-        const activeUsersCount = users.filter(user => 
-          new Date(user.lastLogin) > thirtyDaysAgo
-        ).length;
-
-        const newUsers = users.filter(user => 
-          new Date(user.createdAt) > thirtyDaysAgo
-        ).length;
-
-        const growthRate = users.length > 0 
-          ? Math.round((newUsers / users.length) * 100)
-          : 0;
-
+        // Map API response to stats based on the actual structure
         setStats({
-          usersCount: users.length,
-          diagnosesCount: diagnoses.length,
-          varietiesCount: varieties.length,
-          activeUsers: activeUsersCount,
-          accuracyRate: 95, // Mock data - replace with actual calculation
-          monthlyGrowth: growthRate
+          usersCount: data.analytics?.userStats?.totalUsers || 0,
+          diagnosesCount: data.analytics?.diseaseStats?.totalDiagnoses || 0,
+          varietiesCount: data.analytics?.varietyStats?.totalIdentifications || 0,
+          activeUsers: data.analytics?.userStats?.activeUsers || 0,
+          accuracyRate: data.analytics?.systemStats?.accuracy || data.performance?.accuracy || 0,
+          monthlyGrowth: 0, // No trend data available
         });
 
-        setActivities(recentActivities.slice(0, 5));
+        // Map recent activities (no activity data present, so empty array)
+        setActivities([]);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to fetch dashboard data');
+        console.error('Error fetching dashboard data:', err);
       } finally {
         setIsLoading(false);
       }
@@ -185,8 +165,8 @@ export default function AdminDashboard() {
                     </span>
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div 
-                      className="bg-green-600 rounded-full h-2" 
+                    <div
+                      className="bg-green-600 rounded-full h-2"
                       style={{ width: `${stats.accuracyRate}%` }}
                     ></div>
                   </div>
@@ -199,8 +179,8 @@ export default function AdminDashboard() {
                     </span>
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div 
-                      className="bg-blue-600 rounded-full h-2" 
+                    <div
+                      className="bg-blue-600 rounded-full h-2"
                       style={{ width: `${stats.monthlyGrowth}%` }}
                     ></div>
                   </div>

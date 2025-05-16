@@ -11,7 +11,7 @@ interface ActivityLog {
   details: string;
   timestamp: string;
   ipAddress: string;
-  status: 'success' | 'failure' | 'warning';
+  status: 'SUCCESS' | 'FAILURE' | 'WARNING';
 }
 
 export default function ActivityLogsPage() {
@@ -32,18 +32,27 @@ export default function ActivityLogsPage() {
           throw new Error('Authentication token not found');
         }
 
-        const response = await fetch(`${API_BASE_URL}/api/activity-logs`, {
+        const response = await fetch(`${API_BASE_URL}/api/admin/activity-logs`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },
         });
 
         if (!response.ok) {
-          throw new Error('Failed to fetch activity logs');
+          if (response.status === 403) {
+            throw new Error('Access denied: Admin privileges required');
+          } else if (response.status === 500) {
+            throw new Error('Internal server error');
+          } else {
+            throw new Error('Failed to fetch activity logs');
+          }
         }
 
-        const data = await response.json();
-        setLogs(data);
+        const data: ActivityLog[] = await response.json();
+        const sortedData = data.sort((a, b) => 
+          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+        );
+        setLogs(sortedData);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load activity logs');
       } finally {
@@ -56,15 +65,15 @@ export default function ActivityLogsPage() {
 
   const filteredLogs = filter === 'all' 
     ? logs 
-    : logs.filter(log => log.status === filter);
+    : logs.filter(log => log.status.toLowerCase() === filter);
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'success':
+      case 'SUCCESS':
         return 'bg-green-100 text-green-800';
-      case 'failure':
+      case 'FAILURE':
         return 'bg-red-100 text-red-800';
-      case 'warning':
+      case 'WARNING':
         return 'bg-yellow-100 text-yellow-800';
       default:
         return 'bg-gray-100 text-gray-800';
@@ -96,7 +105,9 @@ export default function ActivityLogsPage() {
       {error && (
         <div className="mb-4 p-4 bg-red-50 text-red-700 rounded-lg flex items-center gap-2">
           <AlertCircle className="h-5 w-5" />
-          {error}
+          {error === 'Access denied: Admin privileges required'
+            ? 'You do not have admin privileges. Please contact an administrator or log in with an admin account.'
+            : error}
         </div>
       )}
 

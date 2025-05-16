@@ -18,7 +18,7 @@
       "@/*": ["*"],
       "@/services/*": ["services/*"],
       "@/components/*": ["components/*"],
-      "@/lib/*": ["lib/*"] // Added this line
+      "@/lib/*": ["lib/*"]
     },
     "plugins": [
       {
@@ -31,6 +31,7 @@
     "**/*.ts",
     "**/*.tsx",
     ".next/types/**/*.ts",
+    "types/next-auth.d.ts",
     "src/**/*"
   ],
   "exclude": ["node_modules"]

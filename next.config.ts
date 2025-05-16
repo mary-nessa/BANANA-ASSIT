@@ -1,13 +1,12 @@
 import type { NextConfig } from "next";
 
-// next.config.js
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   async rewrites() {
     return [
       {
         source: '/api/:path*',
-        destination: 'http://13.217.166.111:8080S:path*',
+        destination: 'http://20.62.15.198:8080/api/:path*', // Fixed URL format
       },
     ];
   },

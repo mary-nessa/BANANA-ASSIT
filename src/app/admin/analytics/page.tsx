@@ -4,6 +4,43 @@ import { useState, useEffect } from 'react';
 import { BarChart3, LineChart, PieChart, AlertCircle } from 'lucide-react';
 import { API_BASE_URL } from '@/utils/analysis';
 
+// Define interface based on API response
+interface ApiAnalyticsData {
+  userStats: {
+    totalUsers: number;
+    activeUsers: number;
+    newUsers: number;
+    activityByMonth: { [key: string]: number };
+    mostActiveUsers: { [key: string]: number };
+  };
+  diseaseStats: {
+    totalDiagnoses: number;
+    periodDiagnoses: number;
+    topDiseases: { [key: string]: number };
+    averageConfidence: { [key: string]: number };
+    diagnosesPerMonth: { [key: string]: number };
+    averageProcessingTime: number;
+  };
+  varietyStats: {
+    totalIdentifications: number;
+    periodIdentifications: number;
+    topVarieties: { [key: string]: number };
+    averageConfidence: { [key: string]: number };
+    identificationsPerMonth: { [key: string]: number };
+    averageProcessingTime: number;
+  };
+  systemStats: {
+    accuracy: number;
+    totalRequests: number;
+    averageResponseTime: number;
+    errorRate: number;
+    systemHealth: string;
+  };
+  startDate: string;
+  endDate: string;
+}
+
+// Frontend interface (adjusted to match API data usage)
 interface AnalyticsData {
   userStats: {
     total: number;
@@ -39,18 +76,55 @@ export default function AnalyticsPage() {
           throw new Error('Authentication token not found');
         }
 
-        const response = await fetch(`${API_BASE_URL}/api/analytics`, {
+        // Use the correct API endpoint
+        const response = await fetch(`${API_BASE_URL}/api/admin/analytics`, {
           headers: {
             Authorization: `Bearer ${token}`,
+            Accept: '*/*',
           },
         });
 
         if (!response.ok) {
+          if (response.status === 403) {
+            throw new Error('Access denied: Admin privileges required');
+          } else if (response.status === 500) {
+            throw new Error('Internal server error');
+          }
           throw new Error('Failed to fetch analytics data');
         }
 
-        const data = await response.json();
-        setAnalytics(data);
+        const data: ApiAnalyticsData = await response.json();
+
+        // Transform API data to match frontend expectations
+        const transformedData: AnalyticsData = {
+          userStats: {
+            total: data.userStats.totalUsers,
+            active: data.userStats.activeUsers,
+            newThisMonth: data.userStats.newUsers,
+          },
+          diseaseStats: {
+            totalScans: data.diseaseStats.totalDiagnoses,
+            commonDiseases: Object.entries(data.diseaseStats.topDiseases).map(([name, count]) => ({
+              name,
+              count,
+            })),
+            // Calculate average confidence for accuracyRate
+            accuracyRate: Object.values(data.diseaseStats.averageConfidence).reduce((sum, val) => sum + val, 0) /
+              Object.values(data.diseaseStats.averageConfidence).length || 0,
+          },
+          varietyStats: {
+            totalIdentifications: data.varietyStats.totalIdentifications,
+            commonVarieties: Object.entries(data.varietyStats.topVarieties).map(([name, count]) => ({
+              name,
+              count,
+            })),
+            // Calculate average confidence for accuracyRate
+            accuracyRate: Object.values(data.varietyStats.averageConfidence).reduce((sum, val) => sum + val, 0) /
+              Object.values(data.varietyStats.averageConfidence).length || 0,
+          },
+        };
+
+        setAnalytics(transformedData);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load analytics');
       } finally {
@@ -95,7 +169,8 @@ export default function AnalyticsPage() {
                 </div>
                 <div className="flex justify-between">
                   <div>
-                    <p className="text-gray-600 text-sm">Active Users</p>
+                    <p className="t
+ext-gray-600 text-sm">Active Users</p>
                     <p className="text-lg font-semibold text-gray-800">{analytics.userStats.active}</p>
                   </div>
                   <div>
@@ -119,7 +194,7 @@ export default function AnalyticsPage() {
                 </div>
                 <div>
                   <p className="text-gray-600 text-sm">Accuracy Rate</p>
-                  <p className="text-lg font-semibold text-green-600">{analytics.diseaseStats.accuracyRate}%</p>
+                  <p className="text-lg font-semibold text-green-600">{analytics.diseaseStats.accuracyRate.toFixed(1)}%</p>
                 </div>
               </div>
             </div>
@@ -137,7 +212,7 @@ export default function AnalyticsPage() {
                 </div>
                 <div>
                   <p className="text-gray-600 text-sm">Accuracy Rate</p>
-                  <p className="text-lg font-semibold text-green-600">{analytics.varietyStats.accuracyRate}%</p>
+                  <p className="text-lg font-semibold text-green-600">{analytics.varietyStats.accuracyRate.toFixed(1)}%</p>
                 </div>
               </div>
             </div>

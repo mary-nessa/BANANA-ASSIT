@@ -1,4 +1,3 @@
-// components/Sidebar.tsx
 "use client";
 
 import Link from 'next/link';
@@ -12,7 +11,10 @@ import {
   FiLogIn, 
   FiUserPlus,
   FiMenu,
-  FiX
+  FiX,
+  FiMessageSquare,
+  FiMap,
+  FiCheckCircle
 } from 'react-icons/fi';
 import { useAuth } from '@/utils/analysis';
 
@@ -27,10 +29,10 @@ export default function Sidebar() {
     const handleResize = () => {
       const mobile = window.innerWidth < 768;
       setIsMobile(mobile);
-      setIsOpen(!mobile); // Open on desktop, closed on mobile by default
+      setIsOpen(!mobile);
     };
 
-    handleResize(); // Initialize
+    handleResize();
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
@@ -47,28 +49,25 @@ export default function Sidebar() {
 
   return (
     <>
-      {/* Mobile toggle button - positioned below AppBar */}
       {isMobile && (
         <button
           onClick={toggleSidebar}
           className={`fixed z-40 p-3 m-2 rounded-lg bg-green-600 text-white transition-all duration-300 ${
             isOpen ? 'left-64' : 'left-0'
           }`}
-          style={{ top: '5.5rem' }} // 5rem (AppBar) + 0.5rem
+          style={{ top: '5.5rem' }}
           aria-label="Toggle sidebar"
         >
           {isOpen ? <FiX size={24} /> : <FiMenu size={24} />}
         </button>
       )}
 
-      {/* Sidebar - positioned below AppBar */}
       <nav
         className={`fixed top-20 h-[calc(100vh-5rem)] z-30 bg-white border-r border-gray-200 shadow-lg transition-all duration-300 ${
           isOpen ? 'w-64' : 'w-0 overflow-hidden'
         } ${!isMobile ? 'md:w-64' : ''}`}
       >
         <div className="flex flex-col h-full p-4 space-y-2 overflow-y-auto">
-          {/* Navigation Links */}
           <NavLink
             href="/home"
             active={isActive('/home')}
@@ -89,13 +88,35 @@ export default function Sidebar() {
             icon={<FiGrid size={20} />}
             label="Variety Identification"
           />
-        
+          
           <NavLink
+            href="/plantings"
+            active={isActive('/plantings')}
+            icon={<FiMap size={20} />}
+            label="Plantation Management"
+          />
+          
+          <NavLink
+            href="/tasks"
+            active={isActive('/tasks')}
+            icon={<FiCheckCircle size={20} />}
+            label="Tasks"
+          />
+          
+          {/* <NavLink
             href="/settings"
             active={isActive('/settings')}
             icon={<FiSettings size={20} />}
             label="Settings"
-          />          {/* Auth Links - Only show when not authenticated */}
+          /> */}
+          
+          <NavLink
+            href="/feedback"
+            active={isActive('/feedback')}
+            icon={<FiMessageSquare size={20} />}
+            label="Feedback"
+          />
+          
           {!isAuthenticated && (
             <div className="mt-auto space-y-2">
               <NavLink
@@ -116,7 +137,6 @@ export default function Sidebar() {
         </div>
       </nav>
 
-      {/* Mobile overlay */}
       {isMobile && isOpen && (
         <div 
           className="fixed inset-0 z-20 bg-black bg-opacity-50"
@@ -127,7 +147,6 @@ export default function Sidebar() {
   );
 }
 
-// NavLink component with TypeScript interface
 interface NavLinkProps {
   href: string;
   active: boolean;
