@@ -45,7 +45,7 @@ export default function ChatbotPage() {
   };
 
   const cleanPunctuation = (text: string) => {
-    return text.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, '').trim();
+    return text.replace(/[^a-zA-Z0-9\s]/g, '').trim();
   };
 
   const sendMessageToAPI = async (message: string): Promise<string> => {

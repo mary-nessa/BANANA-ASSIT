@@ -93,15 +93,10 @@ export default function Sidebar() {
             href="/plantings"
             active={isActive('/plantings')}
             icon={<FiMap size={20} />}
-            label="Plantation Management"
+            label="Planting Management"
           />
           
-          <NavLink
-            href="/tasks"
-            active={isActive('/tasks')}
-            icon={<FiCheckCircle size={20} />}
-            label="Tasks"
-          />
+          
           
           {/* <NavLink
             href="/settings"

@@ -92,7 +92,7 @@ export default function HomeScreen() {
             <div className="w-12 h-12 bg-green-100 text-green-600 rounded-full flex items-center justify-center text-xl font-bold mb-4">
               1
             </div>
-            <h3 className="text-lg font-semibold mb-2">Upload Photo</h3>
+            <h3 className="text-xl font-semibold mb-3 text-gray-800">Upload Photo</h3>
             <p className="text-gray-600">Take or upload a photo of your banana plant or fruit.</p>
           </div>
           
@@ -100,7 +100,7 @@ export default function HomeScreen() {
             <div className="w-12 h-12 bg-green-100 text-green-600 rounded-full flex items-center justify-center text-xl font-bold mb-4">
               2
             </div>
-            <h3 className="text-lg font-semibold mb-2">AI Analysis</h3>
+            <h3 className="text-xl font-semibold mb-3 text-gray-800">AI Analysis</h3>
             <p className="text-gray-600">Our AI system analyzes the image for diseases or variety identification.</p>
           </div>
           
@@ -108,7 +108,7 @@ export default function HomeScreen() {
             <div className="w-12 h-12 bg-green-100 text-green-600 rounded-full flex items-center justify-center text-xl font-bold mb-4">
               3
             </div>
-            <h3 className="text-lg font-semibold mb-2">Get Results</h3>
+            <h3 className="text-xl font-semibold mb-3 text-gray-800">Get Results</h3>
             <p className="text-gray-600">Receive detailed analysis and recommendations instantly.</p>
           </div>
         </div>

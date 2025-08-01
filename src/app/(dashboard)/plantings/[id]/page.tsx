@@ -41,14 +41,14 @@ export default function PlantingDetailsPage() {
   const [expandedStage, setExpandedStage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [isCompleting, setIsCompleting] = useState<string | null>(null);
-
   const stages = [
     'LAND_PREPARATION',
     'PLANTING',
     'VEGETATIVE_GROWTH',
     'FLOWERING',
     'FRUIT_DEVELOPMENT',
-    'HARVESTING',
+    'HARVEST',
+    'POST_HARVEST',
   ];
 
   const fetchPlantingData = async (authToken: string) => {
@@ -90,10 +90,10 @@ export default function PlantingDetailsPage() {
     }
 
     fetchPlantingData(authToken);
-  }, [id, router]);
-
+  }, [id, router]);  // Group all tasks under the current stage regardless of their category
   const tasksByStage = tasks.reduce((acc, task) => {
-    const stage = task.category ? task.category.toUpperCase() : 'UNASSIGNED';
+    // All tasks belong to the current stage since backend returns only tasks for current stage
+    const stage = planting?.currentStage || 'UNASSIGNED';
     if (!acc[stage]) acc[stage] = [];
     acc[stage].push(task);
     return acc;
@@ -199,11 +199,9 @@ export default function PlantingDetailsPage() {
       </div>
     );
   }
-
   const isTaskActionable = (taskStage: string) => {
-    const currentStageIndex = stages.indexOf(planting.currentStage);
-    const taskStageIndex = stages.indexOf(taskStage);
-    return taskStageIndex <= currentStageIndex || taskStageIndex === -1;
+    // Tasks are always actionable in the current stage since backend only returns tasks for current stage
+    return true;
   };
 
   const getPriorityColor = (priority: string) => {
@@ -406,9 +404,8 @@ export default function PlantingDetailsPage() {
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   completeTask(task.id);
-                                }}
-                                disabled={
-                                  isCompleting === task.id || !isTaskActionable(task.category)
+                                }}                                disabled={
+                                  isCompleting === task.id || !isTaskActionable(task.stage || task.category || '')
                                 }
                                 className={`ml-4 px-4 py-2 rounded-lg transition-all duration-200 flex items-center ${
                                   isCompleting === task.id || !isTaskActionable(task.category)
@@ -499,7 +496,7 @@ export default function PlantingDetailsPage() {
                               e.stopPropagation();
                               completeTask(task.id);
                             }}
-                            disabled={isCompleting === task.id || !isTaskActionable(task.category)}
+                            disabled={isCompleting === task.id || !isTaskActionable(task.stage || task.category || '')}
                             className={`ml-4 px-4 py-2 rounded-lg transition-all duration-200 flex items-center ${
                               isCompleting === task.id || !isTaskActionable(task.category)
                                 ? 'bg-gray-300 text-gray-500 cursor-not-allowed'

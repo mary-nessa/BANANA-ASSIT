@@ -97,16 +97,15 @@ const TasksPage: React.FC = () => {
           checkResponse(overdueResponse, 'overdue'),
         ]);
 
-        // Explicitly type the map parameter as ApiTask
         const allTasks = [
-  ...upcomingData.map((t: ApiTask) => convertToTask(t)),
-  ...todayData.map((t: ApiTask) => convertToTask(t)),
-  ...overdueData.map((t: ApiTask) => convertToTask(t)),
-].reduce((unique: Task[], task: Task) => {
-  if (!unique.find((t: Task) => t.id === task.id)) unique.push(task);
-  return unique;
-}, [] as Task[]);
-        console.log('Fetched tasks:', allTasks); // Debug log
+          ...upcomingData.map((t: ApiTask) => convertToTask(t)),
+          ...todayData.map((t: ApiTask) => convertToTask(t)),
+          ...overdueData.map((t: ApiTask) => convertToTask(t)),
+        ].reduce((unique: Task[], task: Task) => {
+          if (!unique.find((t: Task) => t.id === task.id)) unique.push(task);
+          return unique;
+        }, [] as Task[]);
+        console.log('Fetched tasks:', allTasks);
         setTasks(allTasks);
       } catch (error) {
         if (error instanceof Error) {
@@ -152,13 +151,6 @@ const TasksPage: React.FC = () => {
     }
   };
 
-  const tasksByStage = tasks.reduce((acc, task) => {
-    const stage = task.stage || 'UNASSIGNED';
-    if (!acc[stage]) acc[stage] = [];
-    acc[stage].push(task);
-    return acc;
-  }, {} as Record<string, Task[]>);
-
   const filteredTasks = tasks.filter((task) => {
     const today = new Date().toISOString().split('T')[0];
     switch (activeTab) {
@@ -171,6 +163,19 @@ const TasksPage: React.FC = () => {
     }
   });
 
+  const tasksByPlanting = filteredTasks.reduce((acc, task) => {
+    const plantingId = task.plantingId;
+    if (!acc[plantingId]) {
+      acc[plantingId] = { plotIdentifier: task.plotIdentifier, tasksByStage: {} as Record<string, Task[]> };
+    }
+    const stage = task.stage || 'UNASSIGNED';
+    if (!acc[plantingId].tasksByStage[stage]) {
+      acc[plantingId].tasksByStage[stage] = [];
+    }
+    acc[plantingId].tasksByStage[stage].push(task);
+    return acc;
+  }, {} as Record<string, { plotIdentifier: string; tasksByStage: Record<string, Task[]> }>);
+
   if (loading) return (
     <div className="p-4">
       <div className="animate-pulse space-y-4">
@@ -181,86 +186,103 @@ const TasksPage: React.FC = () => {
   );
 
   return (
-    <div className="p-8 bg-gray-100 min-h-screen">
+    <div className="p-4 bg-gray-50 min-h-screen">
       <Toaster position="top-right" />
-      <h1 className="text-3xl font-bold mb-6">Task Management</h1>
-      <div className="mb-4">
+      <h1 className="text-2xl font-bold mb-6 text-gray-800">Task Management</h1>
+      
+      <div className="mb-6 flex gap-2">
         <button
           onClick={() => setActiveTab('upcoming')}
-          className={`mr-2 px-4 py-2 rounded ${activeTab === 'upcoming' ? 'bg-blue-600 text-white' : 'bg-blue-200 hover:bg-blue-300'}`}
+          className={`px-4 py-2 rounded-md transition-colors ${
+            activeTab === 'upcoming' 
+              ? 'bg-blue-600 text-white' 
+              : 'bg-white text-gray-700 hover:bg-gray-100'
+          }`}
         >
           Upcoming
         </button>
         <button
           onClick={() => setActiveTab('today')}
-          className={`mr-2 px-4 py-2 rounded ${activeTab === 'today' ? 'bg-green-600 text-white' : 'bg-green-200 hover:bg-green-300'}`}
+          className={`px-4 py-2 rounded-md transition-colors ${
+            activeTab === 'today' 
+              ? 'bg-green-600 text-white' 
+              : 'bg-white text-gray-700 hover:bg-gray-100'
+          }`}
         >
           Today
         </button>
         <button
           onClick={() => setActiveTab('overdue')}
-          className={`px-4 py-2 rounded ${activeTab === 'overdue' ? 'bg-red-600 text-white' : 'bg-red-200 hover:bg-red-300'}`}
+          className={`px-4 py-2 rounded-md transition-colors ${
+            activeTab === 'overdue' 
+              ? 'bg-red-600 text-white' 
+              : 'bg-white text-gray-700 hover:bg-gray-100'
+          }`}
         >
           Overdue
         </button>
       </div>
+
       <div className="space-y-6">
-        {STAGES.map((stage) => {
-          const stageTasks = tasksByStage[stage]?.filter((t) => filteredTasks.some((ft) => ft.id === t.id)) || [];
-          if (stageTasks.length === 0) return null;
-          return (
-            <div key={stage} className="bg-white p-4 rounded-lg shadow-md">
-              <h2 className="text-xl font-semibold mb-2">{stage.replace('_', ' ')} ({stageTasks.length})</h2>
-              <div className="space-y-2">
-                {stageTasks.map((task) => (
-                  <div key={task.id} className="p-3 bg-gray-50 rounded-lg flex justify-between items-center">
-                    <div>
-                      <p className="font-medium">{task.description}</p>
-                      <p className="text-sm text-gray-500">Due: {task.dueDate} | Priority: {task.priority}</p>
+        {Object.entries(tasksByPlanting).map(([plantingId, { plotIdentifier, tasksByStage }]) => (
+          <div key={plantingId} className="bg-white p-5 rounded-lg shadow-sm">
+            <h2 className="text-lg font-semibold mb-4 text-gray-800">
+              Planting {plotIdentifier} <span className="text-gray-500">({Object.values(tasksByStage).flat().length} tasks)</span>
+            </h2>
+            <div className="space-y-4">
+              {STAGES.map((stage) => {
+                const stageTasks = tasksByStage[stage] || [];
+                if (stageTasks.length === 0) return null;
+                return (
+                  <div key={stage} className="bg-gray-50 p-4 rounded-md">
+                    <h3 className="font-medium mb-3 text-gray-700">
+                      {stage.replace('_', ' ')} <span className="text-gray-500 text-sm">({stageTasks.length})</span>
+                    </h3>
+                    <div className="space-y-3">
+                      {stageTasks.map((task) => (
+                        <div key={task.id} className="p-3 bg-white rounded-md flex justify-between items-center shadow-xs">
+                          <div>
+                            <p className="font-medium text-gray-800">{task.description}</p>
+                            <div className="flex gap-2 mt-1">
+                              <span className="text-xs text-gray-500">Due: {task.dueDate}</span>
+                              <span className={`text-xs ${
+                                task.priority === 'HIGH' ? 'text-red-600' :
+                                task.priority === 'MEDIUM' ? 'text-yellow-600' :
+                                'text-green-600'
+                              }`}>
+                                {task.priority}
+                              </span>
+                            </div>
+                          </div>
+                          {task.status === 'PENDING' ? (
+                            <button
+                              onClick={() => completeTask(task.id)}
+                              disabled={isCompleting === task.id}
+                              className={`flex items-center px-3 py-1 rounded-md text-sm ${
+                                isCompleting === task.id 
+                                  ? 'bg-gray-300 text-gray-600' 
+                                  : 'bg-green-600 hover:bg-green-700 text-white'
+                              }`}
+                            >
+                              {isCompleting === task.id ? <FiLoader className="animate-spin mr-2" /> : <FiCheckCircle className="mr-2" />}
+                              Complete
+                            </button>
+                          ) : (
+                            <span className="text-green-600 text-sm font-medium">Completed</span>
+                          )}
+                        </div>
+                      ))}
                     </div>
-                    {task.status === 'PENDING' ? (
-                      <button
-                        onClick={() => completeTask(task.id)}
-                        disabled={isCompleting === task.id}
-                        className={`flex items-center px-3 py-1 rounded ${isCompleting === task.id ? 'bg-gray-400' : 'bg-green-600 text-white hover:bg-green-700'}`}
-                      >
-                        {isCompleting === task.id ? <FiLoader className="animate-spin mr-2" /> : <FiCheckCircle className="mr-2" />}
-                        Complete
-                      </button>
-                    ) : (
-                      <span className="text-green-600 font-medium">Completed</span>
-                    )}
                   </div>
-                ))}
-              </div>
+                );
+              })}
             </div>
-          );
-        })}
-        {tasksByStage['UNASSIGNED'] && tasksByStage['UNASSIGNED'].filter((t) => filteredTasks.some((ft) => ft.id === t.id)).length > 0 && (
-          <div key="UNASSIGNED" className="bg-white p-4 rounded-lg shadow-md">
-            <h2 className="text-xl font-semibold mb-2">Unassigned Tasks ({tasksByStage['UNASSIGNED'].filter((t) => filteredTasks.some((ft) => ft.id === t.id)).length})</h2>
-            <div className="space-y-2">
-              {tasksByStage['UNASSIGNED'].filter((t) => filteredTasks.some((ft) => ft.id === t.id)).map((task) => (
-                <div key={task.id} className="p-3 bg-gray-50 rounded-lg flex justify-between items-center">
-                  <div>
-                    <p className="font-medium">{task.description}</p>
-                    <p className="text-sm text-gray-500">Due: {task.dueDate} | Priority: {task.priority}</p>
-                  </div>
-                  {task.status === 'PENDING' ? (
-                    <button
-                      onClick={() => completeTask(task.id)}
-                      disabled={isCompleting === task.id}
-                      className={`flex items-center px-3 py-1 rounded ${isCompleting === task.id ? 'bg-gray-400' : 'bg-green-600 text-white hover:bg-green-700'}`}
-                    >
-                      {isCompleting === task.id ? <FiLoader className="animate-spin mr-2" /> : <FiCheckCircle className="mr-2" />}
-                      Complete
-                    </button>
-                  ) : (
-                    <span className="text-green-600 font-medium">Completed</span>
-                  )}
-                </div>
-              ))}
-            </div>
+          </div>
+        ))}
+
+        {Object.keys(tasksByPlanting).length === 0 && (
+          <div className="bg-white p-4 rounded-lg text-center">
+            <p className="text-gray-500">No tasks found for the selected filter.</p>
           </div>
         )}
       </div>
